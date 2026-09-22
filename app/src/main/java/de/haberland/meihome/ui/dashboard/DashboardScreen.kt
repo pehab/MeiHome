@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -22,7 +21,9 @@ import de.haberland.meihome.ui.dashboard.components.SmartHomeBar
 
 @Composable
 fun DashboardScreen(
-    state: DashboardUiState = DashboardUiState(),
+    state: DashboardUiState,
+    onToggleShoppingItem: (String, Boolean) -> Unit,
+    onToggleTodoItem: (String, Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -48,7 +49,7 @@ fun DashboardScreen(
                     items = state.shoppingItems,
                     onSelectList = {},
                     onAddItem = {},
-                    onToggleItem = { _, _ -> },
+                    onToggleItem = onToggleShoppingItem,
                 )
                 DashboardListCard(
                     modifier = Modifier.weight(1f),
@@ -57,7 +58,7 @@ fun DashboardScreen(
                     items = state.todoItems,
                     onSelectList = {},
                     onAddItem = {},
-                    onToggleItem = { _, _ -> },
+                    onToggleItem = onToggleTodoItem,
                 )
             }
 
@@ -97,13 +98,38 @@ private fun DashboardHeader() {
 @Composable
 private fun CalendarCard(modifier: Modifier = Modifier) {
     Card(modifier = modifier) {
-        Column(modifier = Modifier.padding(20.dp)) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
             Text("Kalender", style = MaterialTheme.typography.titleLarge)
+            Text("Heute", style = MaterialTheme.typography.labelLarge)
+            CalendarEntry("16:00", "Fußball")
+            CalendarEntry("18:30", "Elternabend")
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                "Android-Kalender wird als eigener Datenbereich angebunden.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text("Morgen", style = MaterialTheme.typography.labelLarge)
+            CalendarEntry("08:00", "Schule")
+            CalendarEntry("17:15", "Training")
         }
+    }
+}
+
+@Composable
+private fun CalendarEntry(
+    time: String,
+    title: String,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = time,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge,
+        )
     }
 }
