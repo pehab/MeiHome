@@ -1,6 +1,7 @@
 package de.haberland.meihome.ui
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -13,7 +14,9 @@ import de.haberland.meihome.ui.dashboard.DashboardScreen
 fun MeiHomeApp() {
     var state by remember { mutableStateOf(DashboardMockData.state) }
 
-    MaterialTheme {
+    MaterialTheme(
+        colorScheme = darkColorScheme(),
+    ) {
         DashboardScreen(
             state = state,
             onToggleShoppingItem = { itemId, checked ->
