@@ -10,6 +10,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -24,10 +28,11 @@ fun DashboardScreen(
     state: DashboardUiState,
     onToggleShoppingItem: (String, Boolean) -> Unit,
     onToggleTodoItem: (String, Boolean) -> Unit,
+    onOpenSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
-        DashboardHeader()
+        DashboardHeader(onOpenSettings = onOpenSettings)
 
         Row(
             modifier = Modifier
@@ -78,7 +83,7 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun DashboardHeader() {
+private fun DashboardHeader(onOpenSettings: () -> Unit) {
     Surface(shadowElevation = 2.dp) {
         Row(
             modifier = Modifier
@@ -95,6 +100,12 @@ private fun DashboardHeader() {
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            IconButton(onClick = onOpenSettings) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "Einstellungen",
+                )
+            }
         }
     }
 }
