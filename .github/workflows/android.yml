@@ -23,5 +23,8 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
 
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
       - name: Test and build debug APK
         run: ./gradlew testDebugUnitTest assembleDebug --warning-mode=all
