@@ -36,14 +36,16 @@ fun DashboardScreen(
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Column(
+            Row(
                 modifier = Modifier
-                    .weight(1f)
+                    .weight(1.25f)
                     .fillMaxHeight(),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 DashboardListCard(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
                     title = "Einkauf",
                     selectedListName = state.shoppingListName,
                     items = state.shoppingItems,
@@ -52,7 +54,9 @@ fun DashboardScreen(
                     onToggleItem = onToggleShoppingItem,
                 )
                 DashboardListCard(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
                     title = "Todos",
                     selectedListName = state.todoListName,
                     items = state.todoItems,
@@ -64,7 +68,7 @@ fun DashboardScreen(
 
             CalendarCard(
                 modifier = Modifier
-                    .weight(1f)
+                    .weight(0.75f)
                     .fillMaxHeight(),
             )
         }
