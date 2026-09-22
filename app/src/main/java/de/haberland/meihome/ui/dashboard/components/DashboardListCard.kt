@@ -73,11 +73,13 @@ fun DashboardListCard(
                 return@Column
             }
 
+            val sortedItems = items.sortedBy { item -> item.isChecked }
+
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                items(items, key = { it.id }) { item ->
+                items(sortedItems, key = { it.id }) { item ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
