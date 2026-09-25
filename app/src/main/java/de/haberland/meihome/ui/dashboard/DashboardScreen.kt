@@ -9,9 +9,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -22,6 +25,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import de.haberland.meihome.ui.dashboard.components.DashboardListCard
 import de.haberland.meihome.ui.dashboard.components.SmartHomeBar
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 
 @Composable
 fun DashboardScreen(
@@ -32,6 +41,7 @@ fun DashboardScreen(
     onSelectTodoList: () -> Unit,
     onAddShoppingItem: () -> Unit,
     onAddTodoItem: () -> Unit,
+    onRequestCalendarPermission: () -> Unit,
     onOpenSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -76,6 +86,8 @@ fun DashboardScreen(
             }
 
             CalendarCard(
+                state = state,
+                onRequestPermission = onRequestCalendarPermission,
                 modifier = Modifier
                     .weight(0.75f)
                     .fillMaxHeight(),
@@ -115,40 +127,105 @@ private fun DashboardHeader(onOpenSettings: () -> Unit) {
 }
 
 @Composable
-private fun CalendarCard(modifier: Modifier = Modifier) {
+private fun CalendarCard(
+    state: DashboardUiState,
+    onRequestPermission: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Card(modifier = modifier) {
         Column(
             modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Kalender", style = MaterialTheme.typography.titleLarge)
-            Text("Heute", style = MaterialTheme.typography.labelLarge)
-            CalendarEntry("16:00", "Fußball")
-            CalendarEntry("18:30", "Elternabend")
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Morgen", style = MaterialTheme.typography.labelLarge)
-            CalendarEntry("08:00", "Schule")
-            CalendarEntry("17:15", "Training")
+
+            if (!state.calendarPermissionGranted) {
+                Text(
+                    "MeiHome kann die auf diesem Tablet synchronisierten Kalender anzeigen.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(onClick = onRequestPermission) {
+                    Text("Kalenderzugriff erlauben")
+                }
+                return@Column
+            }
+
+            if (state.calendarEvents.isEmpty()) {
+                Text(
+                    "Keine Termine in den nächsten drei Tagen.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                return@Column
+            }
+
+            val zone = ZoneId.systemDefault()
+            val today = LocalDate.now(zone)
+            val grouped = state.calendarEvents.groupBy { event ->
+                Instant.ofEpochMilli(event.startMillis).atZone(zone).toLocalDate()
+            }
+
+            LazyColumn(
+                modifier = Modifier.fillMaxHeight(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                grouped.toSortedMap().forEach { (date, events) ->
+                    item(key = "header-" + date.toString()) {
+                        Text(
+                            text = when (date) {
+                                today -> "Heute"
+                                today.plusDays(1) -> "Morgen"
+                                else -> date.format(
+                                    DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
+                                        .withLocale(Locale.GERMAN),
+                                )
+                            },
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+                    items(
+                        items = events,
+                        key = { event -> event.id.toString() + "-" + event.startMillis.toString() },
+                    ) { event ->
+                        CalendarEntry(event = event)
+                    }
+                    item(key = "space-" + date.toString()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun CalendarEntry(
-    time: String,
-    title: String,
-) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+private fun CalendarEntry(event: CalendarEventUiState) {
+    val zone = ZoneId.systemDefault()
+    val time = if (event.allDay) {
+        "Ganztägig"
+    } else {
+        Instant.ofEpochMilli(event.startMillis)
+            .atZone(zone)
+            .format(DateTimeFormatter.ofPattern("HH:mm"))
+    }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             text = time,
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
         )
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyLarge,
-        )
+        Column {
+            Text(
+                text = event.title,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            event.calendarName?.takeIf { it.isNotBlank() }?.let { calendar ->
+                Text(
+                    text = calendar,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
