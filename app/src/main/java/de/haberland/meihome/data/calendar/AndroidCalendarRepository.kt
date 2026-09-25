@@ -98,11 +98,17 @@ class AndroidCalendarRepository(
 
             buildList {
                 while (cursor.moveToNext()) {
+                    val begin = cursor.getLong(beginIndex)
+                    // CalendarContract.Instances can also return an event that started
+                    // before the requested window but overlaps it. For the wall
+                    // dashboard we only want appointments starting today or later.
+                    if (begin < start) continue
+
                     add(
                         CalendarEvent(
                             id = cursor.getLong(idIndex),
                             title = cursor.getString(titleIndex).orEmpty().ifBlank { "(Ohne Titel)" },
-                            startMillis = cursor.getLong(beginIndex),
+                            startMillis = begin,
                             endMillis = cursor.getLong(endIndex),
                             allDay = cursor.getInt(allDayIndex) != 0,
                             calendarName = cursor.getString(calendarIndex),
