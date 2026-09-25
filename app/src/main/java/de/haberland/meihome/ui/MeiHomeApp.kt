@@ -1,5 +1,8 @@
 package de.haberland.meihome.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -51,6 +55,20 @@ fun MeiHomeApp(
     var settingsOpen by remember { mutableStateOf(false) }
     var selectingRole by remember { mutableStateOf<ListRole?>(null) }
     var addRole by remember { mutableStateOf<ListRole?>(null) }
+    val calendarPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        viewModel.setCalendarPermission(granted)
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.setCalendarPermission(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.READ_CALENDAR,
+            ) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
 
     LaunchedEffect(updateReadyToInstall) {
         if (!updateReadyToInstall) updatePromptDismissed = false
@@ -69,6 +87,9 @@ fun MeiHomeApp(
                 onSelectTodoList = { selectingRole = ListRole.TODO },
                 onAddShoppingItem = { addRole = ListRole.SHOPPING },
                 onAddTodoItem = { addRole = ListRole.TODO },
+                onRequestCalendarPermission = {
+                    calendarPermissionLauncher.launch(Manifest.permission.READ_CALENDAR)
+                },
                 onOpenSettings = { settingsOpen = true },
             )
         }
@@ -79,10 +100,14 @@ fun MeiHomeApp(
                 userEmail = state.userEmail,
                 shoppingListName = state.shoppingListName,
                 todoListName = state.todoListName,
+                calendarPermissionGranted = state.calendarPermissionGranted,
                 onSignIn = { viewModel.signIn(context) },
                 onSignOut = { viewModel.signOut(context) },
                 onSelectShopping = { selectingRole = ListRole.SHOPPING },
                 onSelectTodo = { selectingRole = ListRole.TODO },
+                onRequestCalendarPermission = {
+                    calendarPermissionLauncher.launch(Manifest.permission.READ_CALENDAR)
+                },
                 onDismiss = { settingsOpen = false },
             )
         }
@@ -150,10 +175,12 @@ private fun SettingsDialog(
     userEmail: String?,
     shoppingListName: String?,
     todoListName: String?,
+    calendarPermissionGranted: Boolean,
     onSignIn: () -> Unit,
     onSignOut: () -> Unit,
     onSelectShopping: () -> Unit,
     onSelectTodo: () -> Unit,
+    onRequestCalendarPermission: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -176,6 +203,15 @@ private fun SettingsDialog(
                     }
                     TextButton(onClick = onSelectTodo) {
                         Text("Todos: " + (todoListName ?: "Liste auswählen"))
+                    }
+                    TextButton(onClick = onRequestCalendarPermission) {
+                        Text(
+                            if (calendarPermissionGranted) {
+                                "Kalenderzugriff: erlaubt"
+                            } else {
+                                "Kalenderzugriff erlauben"
+                            },
+                        )
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                     TextButton(onClick = onSignOut) {
