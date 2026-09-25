@@ -18,6 +18,8 @@ Google may process technical information required to provide these services. For
 ## Local data
 App settings and configuration may be stored locally on the device.
 
+MeiHome can optionally read calendar data that is already synchronized on the Android device in order to display upcoming appointments on the dashboard. Calendar data is read locally through Android's calendar provider and is not uploaded by MeiHome to Firebase or another MeiHome server.
+
 ## Third parties
 MeiHome does not contain advertising SDKs and does not use Firebase Analytics or other analytics/tracking services.
 
