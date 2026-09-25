@@ -28,6 +28,10 @@ fun DashboardScreen(
     state: DashboardUiState,
     onToggleShoppingItem: (String, Boolean) -> Unit,
     onToggleTodoItem: (String, Boolean) -> Unit,
+    onSelectShoppingList: () -> Unit,
+    onSelectTodoList: () -> Unit,
+    onAddShoppingItem: () -> Unit,
+    onAddTodoItem: () -> Unit,
     onOpenSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -54,8 +58,8 @@ fun DashboardScreen(
                     title = "Einkauf",
                     selectedListName = state.shoppingListName,
                     items = state.shoppingItems,
-                    onSelectList = {},
-                    onAddItem = {},
+                    onSelectList = onSelectShoppingList,
+                    onAddItem = onAddShoppingItem,
                     onToggleItem = onToggleShoppingItem,
                 )
                 DashboardListCard(
@@ -65,8 +69,8 @@ fun DashboardScreen(
                     title = "Todos",
                     selectedListName = state.todoListName,
                     items = state.todoItems,
-                    onSelectList = {},
-                    onAddItem = {},
+                    onSelectList = onSelectTodoList,
+                    onAddItem = onAddTodoItem,
                     onToggleItem = onToggleTodoItem,
                 )
             }
