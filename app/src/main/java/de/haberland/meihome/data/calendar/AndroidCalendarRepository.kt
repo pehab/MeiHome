@@ -9,8 +9,10 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.CalendarContract
 import androidx.core.content.ContextCompat
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -100,12 +102,24 @@ class AndroidCalendarRepository(
                 while (cursor.moveToNext()) {
                     val begin = cursor.getLong(beginIndex)
                     val eventEnd = cursor.getLong(endIndex)
+                    val allDay = cursor.getInt(allDayIndex) != 0
 
-                    // Keep events that are still active today (for example a week-long
-                    // vacation), but drop events that ended at or before today's start.
-                    // A one-day all-day event from yesterday typically ends exactly at
-                    // today's 00:00 and is therefore excluded.
-                    if (eventEnd <= start) continue
+                    val isStillRelevant = if (allDay) {
+                        // Android stores all-day event boundaries as UTC midnights.
+                        // Comparing those raw millis to local midnight can make a
+                        // yesterday-only event appear to extend into today in positive
+                        // time zones. Compare calendar dates in UTC instead.
+                        val endDateExclusive = Instant.ofEpochMilli(eventEnd)
+                            .atZone(ZoneOffset.UTC)
+                            .toLocalDate()
+                        endDateExclusive > LocalDate.now(zone)
+                    } else {
+                        // Timed events that started before today remain visible only
+                        // while they actually overlap today.
+                        eventEnd > start
+                    }
+
+                    if (!isStillRelevant) continue
 
                     add(
                         CalendarEvent(
@@ -113,7 +127,7 @@ class AndroidCalendarRepository(
                             title = cursor.getString(titleIndex).orEmpty().ifBlank { "(Ohne Titel)" },
                             startMillis = begin,
                             endMillis = eventEnd,
-                            allDay = cursor.getInt(allDayIndex) != 0,
+                            allDay = allDay,
                             calendarName = cursor.getString(calendarIndex),
                         ),
                     )
