@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import de.haberland.meihome.data.auth.FirebaseAuthRepository
+import de.haberland.meihome.data.calendar.AndroidCalendarRepository
 import de.haberland.meihome.data.lists.FirebaseListsRepository
 import de.haberland.meihome.data.preferences.SharedPreferencesDashboardRepository
 import de.haberland.meihome.domain.model.MeiList
@@ -19,6 +20,7 @@ import kotlinx.coroutines.launch
 
 class DashboardViewModel(application: Application) : AndroidViewModel(application) {
     private val authRepository = FirebaseAuthRepository()
+    private val calendarRepository = AndroidCalendarRepository(application)
     private val listsRepository = FirebaseListsRepository()
     private val preferencesRepository = SharedPreferencesDashboardRepository(application)
     private val crashlytics = FirebaseCrashlytics.getInstance()
@@ -29,6 +31,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private var listsJob: Job? = null
     private var shoppingItemsJob: Job? = null
     private var todoItemsJob: Job? = null
+    private var calendarJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -89,6 +92,32 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             runCatching { listsRepository.setItemChecked(itemId, checked) }
                 .onFailure { error -> _uiState.value = _uiState.value.copy(errorMessage = error.message ?: "Änderung fehlgeschlagen") }
+        }
+    }
+
+    fun setCalendarPermission(granted: Boolean) {
+        calendarJob?.cancel()
+        _uiState.value = _uiState.value.copy(
+            calendarPermissionGranted = granted,
+            calendarEvents = if (granted) _uiState.value.calendarEvents else emptyList(),
+        )
+        if (granted) {
+            calendarJob = viewModelScope.launch {
+                calendarRepository.observeUpcomingEvents().collectLatest { events ->
+                    _uiState.value = _uiState.value.copy(
+                        calendarEvents = events.map { event ->
+                            CalendarEventUiState(
+                                id = event.id,
+                                title = event.title,
+                                startMillis = event.startMillis,
+                                endMillis = event.endMillis,
+                                allDay = event.allDay,
+                                calendarName = event.calendarName,
+                            )
+                        },
+                    )
+                }
+            }
         }
     }
 
