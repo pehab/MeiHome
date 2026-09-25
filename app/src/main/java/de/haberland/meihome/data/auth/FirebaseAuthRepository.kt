@@ -4,7 +4,7 @@ import android.content.Context
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -29,13 +29,14 @@ class FirebaseAuthRepository(
 
     suspend fun signIn(context: Context) {
         val credentialManager = CredentialManager.create(context)
-        val googleIdOption = GetGoogleIdOption.Builder()
-            .setFilterByAuthorizedAccounts(false)
-            .setServerClientId(context.getString(R.string.default_web_client_id))
-            .setAutoSelectEnabled(false)
-            .build()
+        // This is an explicit "Sign in with Google" button, so use the dedicated
+        // Google option instead of the passive credential picker. The latter can
+        // legitimately return "No credentials available" on some devices/accounts.
+        val googleOption = GetSignInWithGoogleOption.Builder(
+            serverClientId = context.getString(R.string.default_web_client_id),
+        ).build()
         val request = GetCredentialRequest.Builder()
-            .addCredentialOption(googleIdOption)
+            .addCredentialOption(googleOption)
             .build()
 
         val result = credentialManager.getCredential(context = context, request = request)
