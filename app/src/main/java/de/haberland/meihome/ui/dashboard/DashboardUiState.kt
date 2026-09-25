@@ -12,6 +12,8 @@ data class DashboardUiState(
     val todoListName: String? = null,
     val shoppingItems: List<DashboardListItemUiState> = emptyList(),
     val todoItems: List<DashboardListItemUiState> = emptyList(),
+    val calendarPermissionGranted: Boolean = false,
+    val calendarEvents: List<CalendarEventUiState> = emptyList(),
     val errorMessage: String? = null,
 )
 
@@ -19,4 +21,13 @@ data class DashboardListItemUiState(
     val id: String,
     val text: String,
     val isChecked: Boolean,
+)
+
+data class CalendarEventUiState(
+    val id: Long,
+    val title: String,
+    val startMillis: Long,
+    val endMillis: Long,
+    val allDay: Boolean,
+    val calendarName: String?,
 )
