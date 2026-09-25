@@ -4,7 +4,7 @@ import android.content.Context
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
-import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -29,18 +29,23 @@ class FirebaseAuthRepository(
 
     suspend fun signIn(context: Context) {
         val credentialManager = CredentialManager.create(context)
-        // This is an explicit "Sign in with Google" button, so use the dedicated
-        // Google option instead of the passive credential picker. The latter can
-        // legitimately return "No credentials available" on some devices/accounts.
-        val googleOption = GetSignInWithGoogleOption.Builder(
-            serverClientId = context.getString(R.string.default_web_client_id),
-        ).build()
+        // Keep the login flow identical to MeiLists, where this combination is
+        // already proven to work with the same Firebase project.
+        val googleIdOption = GetGoogleIdOption.Builder()
+            .setFilterByAuthorizedAccounts(false)
+            .setServerClientId(context.getString(R.string.default_web_client_id))
+            .setAutoSelectEnabled(false)
+            .build()
         val request = GetCredentialRequest.Builder()
-            .addCredentialOption(googleOption)
+            .addCredentialOption(googleIdOption)
             .build()
 
         val result = credentialManager.getCredential(context = context, request = request)
-        val googleCredential = GoogleIdTokenCredential.createFrom(result.credential.data)
+        val credential = result.credential
+        require(credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+            "Unerwarteter Credential-Typ"
+        }
+        val googleCredential = GoogleIdTokenCredential.createFrom(credential.data)
         val firebaseCredential = GoogleAuthProvider.getCredential(googleCredential.idToken, null)
         auth.signInWithCredential(firebaseCredential).await()
     }
