@@ -1,5 +1,6 @@
 package de.haberland.meihome.ui.dashboard
 
+import android.app.Activity
 import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
@@ -55,9 +56,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun signIn(context: Context) {
+    fun signIn(activity: Activity) {
         viewModelScope.launch {
-            runCatching { authRepository.signIn(context) }
+            runCatching { authRepository.signIn(activity) }
                 .onFailure { error -> _uiState.value = _uiState.value.copy(errorMessage = error.message ?: "Anmeldung fehlgeschlagen") }
         }
     }

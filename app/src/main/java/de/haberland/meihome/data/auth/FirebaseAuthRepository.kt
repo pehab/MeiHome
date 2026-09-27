@@ -1,8 +1,10 @@
 package de.haberland.meihome.data.auth
 
+import android.app.Activity
 import android.content.Context
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -27,24 +29,23 @@ class FirebaseAuthRepository(
         awaitClose { auth.removeAuthStateListener(listener) }
     }
 
-    suspend fun signIn(context: Context) {
-        val credentialManager = CredentialManager.create(context)
-        // Keep the login flow identical to MeiLists, where this combination is
-        // already proven to work with the same Firebase project.
-        val googleIdOption = GetGoogleIdOption.Builder()
-            .setFilterByAuthorizedAccounts(false)
-            .setServerClientId(context.getString(R.string.default_web_client_id))
-            .setAutoSelectEnabled(false)
-            .build()
+    suspend fun signIn(activity: Activity) {
         val request = GetCredentialRequest.Builder()
-            .addCredentialOption(googleIdOption)
+            .addCredentialOption(
+                GetGoogleIdOption.Builder()
+                    .setFilterByAuthorizedAccounts(false)
+                    .setServerClientId(activity.getString(R.string.default_web_client_id))
+                    .build()
+            )
             .build()
 
-        val result = credentialManager.getCredential(context = context, request = request)
+        val result = CredentialManager.create(activity).getCredential(activity, request)
         val credential = result.credential
-        require(credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-            "Unerwarteter Credential-Typ"
-        }
+        require(
+            credential is CustomCredential &&
+                credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+        ) { "Google-Anmeldung konnte nicht gelesen werden." }
+
         val googleCredential = GoogleIdTokenCredential.createFrom(credential.data)
         val firebaseCredential = GoogleAuthProvider.getCredential(googleCredential.idToken, null)
         auth.signInWithCredential(firebaseCredential).await()

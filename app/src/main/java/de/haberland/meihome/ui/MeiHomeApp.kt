@@ -1,6 +1,9 @@
 package de.haberland.meihome.ui
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -50,6 +53,7 @@ fun MeiHomeApp(
     viewModel: DashboardViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    val activity = context.findActivity()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var updatePromptDismissed by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
@@ -101,7 +105,7 @@ fun MeiHomeApp(
                 shoppingListName = state.shoppingListName,
                 todoListName = state.todoListName,
                 calendarPermissionGranted = state.calendarPermissionGranted,
-                onSignIn = { viewModel.signIn(context) },
+                onSignIn = { activity?.let(viewModel::signIn) },
                 onSignOut = { viewModel.signOut(context) },
                 onSelectShopping = { selectingRole = ListRole.SHOPPING },
                 onSelectTodo = { selectingRole = ListRole.TODO },
@@ -313,3 +317,11 @@ private fun AddItemDialog(
         },
     )
 }
+
+
+private tailrec fun Context.findActivity(): Activity? =
+    when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }
