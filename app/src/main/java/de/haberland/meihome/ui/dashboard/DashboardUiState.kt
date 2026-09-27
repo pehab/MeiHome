@@ -31,3 +31,16 @@ data class CalendarEventUiState(
     val allDay: Boolean,
     val calendarName: String?,
 )
+
+/** Keep the user's selection while category listeners deliver their snapshots independently. */
+internal fun DashboardUiState.withAvailableLists(lists: List<MeiList>): DashboardUiState {
+    val shopping = lists.firstOrNull { it.id == shoppingListId }
+    val todo = lists.firstOrNull { it.id == todoListId }
+    return copy(
+        availableLists = lists,
+        shoppingListName = shopping?.name,
+        todoListName = todo?.name,
+        shoppingItems = if (shopping == null) emptyList() else shoppingItems,
+        todoItems = if (todo == null) emptyList() else todoItems,
+    )
+}

@@ -1,13 +1,16 @@
 # MeiHome
 
 Familien-Dashboard für ein Android-Wandtablet mit MeiLists-Listen und Kalender.
-Aktueller Stand: **0.4.3**, `versionCode 7`; Paket `de.haberland.meihome`.
+Aktueller Stand: **0.5.0**, `versionCode 8`; Paket `de.haberland.meihome`.
 
 ## Verfügbare Funktionen
 
 - Google-Anmeldung über Credential Manager und Firebase Authentication.
 - Auswahl je einer Einkaufs- und Aufgabenliste aus den zugänglichen Firebase-Kategorien von MeiLists.
 - Live-Anzeige, Hinzufügen und Abhaken von Listeneinträgen.
+- Einkaufsprodukte aus dem Katalog der ausgewählten Listenkategorie wählen: Suche, Produktauswahl und Übernahme des Standardbereichs.
+- Freie Einkaufseingabe nur, wenn der erfolgreich geladene Produktkatalog leer ist. Todos bleiben frei eingebbar.
+- Erhaltene Listenauswahl auch bei zeitversetzt eintreffenden Kategorie-Daten.
 - Lokale Speicherung der ausgewählten Listen.
 - Kalenderanzeige für heute und die folgenden zwei Tage über den Android-Kalenderanbieter, inklusive ganztägiger Termine.
 - Google-Play-In-App-Updates und Firebase Crashlytics.
@@ -33,7 +36,13 @@ Alternativ in Android Studio öffnen und Gradle synchronisieren. Den SDK-Pfad be
 
 `app/google-services.json` muss die App `de.haberland.meihome` im selben Firebase-Projekt wie die gewünschten MeiLists-Daten enthalten. Google-Anmeldung aktivieren und die SHA-1-/SHA-256-Fingerprints der verwendeten Signaturzertifikate registrieren. Lokaler Debug-Build und Google-Play-Build können unterschiedliche Zertifikate verwenden. Anschließend die aktualisierte Firebase-Konfiguration herunterladen.
 
-Die App nutzt die Collections `categories`, `shopping_lists` und `list_items`; zugängliche Kategorien werden über `allowedUsers` bestimmt. Firestore-Regeln müssen diese Berechtigungen serverseitig durchsetzen. Deploybare Regeln sind nicht Bestandteil dieses Repositories.
+Die App nutzt die Collections `categories`, `shopping_lists`, `list_items` und `catalog_products`; zugängliche Kategorien werden über `allowedUsers` bestimmt. Firestore-Regeln müssen diese Berechtigungen serverseitig durchsetzen. Deploybare Regeln sind nicht Bestandteil dieses Repositories.
+
+## Einkauf aus dem Katalog
+
+Beim Hinzufügen lädt MeiHome den Produktkatalog aus `catalog_products`, gefiltert nach der `categoryId` der Einkaufsliste. Bei vorhandenem Katalog muss ein Produkt ausgewählt werden; bloßes Tippen eines Namens reicht nicht. Der Produktname und `defaultArea` werden als `text` und `area` am Listeneintrag gespeichert. Katalogpflege erfolgt weiterhin in MeiLists.
+
+Zum Prüfen des Katalogs wird eine Serververbindung benötigt: Ein leerer Offline-Cache gilt nicht als leerer Katalog. Bei Ladefehlern bleibt die Eingabe gesperrt und kann erneut versucht werden. Speicherfehler werden im geöffneten Dialog angezeigt; wiederholtes Tippen während des Speicherns erzeugt keine zusätzlichen Schreibaufträge.
 
 ## Architektur und Qualität
 
@@ -44,9 +53,13 @@ Die App nutzt die Collections `categories`, `shopping_lists` und `list_items`; z
 - `domain/model/`: Listenmodelle.
 - `ui/dashboard/`: ViewModel, Zustand und Darstellung.
 
-GitHub Actions baut die Debug-APK und ruft `testDebugUnitTest` auf. Derzeit gibt es jedoch keine Unit-Test-Quellen; ein grüner Build ist deshalb kein Nachweis für getestete Dashboard-Logik.
+GitHub Actions baut die Debug-APK und führt `testDebugUnitTest` sowie `lintDebug` aus. Die JVM-Tests prüfen Katalogpflicht, freien Eintrag bei leerem Katalog, Kategoriezuordnung, Bereichsübernahme, Lade-/Speicherfehler, doppelte Klicks, Abbruch sowie die Wiederherstellung der Listenauswahl bei zeitversetzten Daten. Firebase-Regeln und die Bedienung auf dem Wandtablet benötigen zusätzlich einen Integrationstest.
 
-Nächste technische Schritte: Fehler von Firestore-Listenern sichtbar machen; Listenauswahl bei asynchron eintreffenden Kategorien zuverlässig erhalten; Kalenderabfragen vom Hauptthread lösen und den Tageswechsel ohne Kalenderänderung berücksichtigen. Diese Abläufe benötigen gezielte Tests. Das ViewModel konstruiert seine Repositories aktuell direkt; injizierbare Abhängigkeiten würden solche Tests erleichtern.
+```bash
+bash gradlew :app:testDebugUnitTest :app:assembleDebug
+```
+
+Firestore-Listenerfehler werden angezeigt, Coroutine-Abbrüche nicht als fachliche Fehler behandelt. Der Einkaufsdialog hat ein eigenes ViewModel mit injizierbarem Repository. Nächste technische Schritte: Kalenderabfragen vom Hauptthread lösen und den Tageswechsel ohne Kalenderänderung berücksichtigen; weitere Dashboard-Abhängigkeiten für Tests injizierbar machen.
 
 ## Datenschutz
 

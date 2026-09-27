@@ -13,8 +13,8 @@ android {
         applicationId = "de.haberland.meihome"
         minSdk = 26
         targetSdk = 37
-        versionCode = 7
-        versionName = "0.4.3"
+        versionCode = 8
+        versionName = "0.5.0"
     }
 
     compileOptions {
@@ -28,6 +28,9 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
