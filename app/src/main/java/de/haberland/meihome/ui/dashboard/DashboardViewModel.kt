@@ -12,10 +12,12 @@ import de.haberland.meihome.data.lists.FirebaseListsRepository
 import de.haberland.meihome.data.preferences.SharedPreferencesDashboardRepository
 import de.haberland.meihome.domain.model.MeiList
 import de.haberland.meihome.domain.model.MeiListItem
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -46,6 +48,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     isSignedIn = user != null,
                     userEmail = user?.email,
                     availableLists = emptyList(),
+                    shoppingListName = null,
+                    todoListName = null,
                     shoppingItems = emptyList(),
                     todoItems = emptyList(),
                     errorMessage = null,
@@ -59,21 +63,21 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun signIn(activity: Activity) {
         viewModelScope.launch {
             runCatching { authRepository.signIn(activity) }
-                .onFailure { error -> _uiState.value = _uiState.value.copy(errorMessage = error.message ?: "Anmeldung fehlgeschlagen") }
+                .onFailure { reportError(it, "Anmeldung fehlgeschlagen") }
         }
     }
 
     fun signOut(context: Context) {
         viewModelScope.launch {
             runCatching { authRepository.signOut(context) }
-                .onFailure { error -> _uiState.value = _uiState.value.copy(errorMessage = error.message ?: "Abmeldung fehlgeschlagen") }
+                .onFailure { reportError(it, "Abmeldung fehlgeschlagen") }
         }
     }
 
     fun selectShoppingList(listId: String) {
         viewModelScope.launch {
             preferencesRepository.selectShoppingList(listId)
-            _uiState.value = _uiState.value.copy(shoppingListId = listId)
+            _uiState.value = _uiState.value.copy(shoppingListId = listId, shoppingItems = emptyList())
             bindSelectedLists(_uiState.value.availableLists)
         }
     }
@@ -81,18 +85,17 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun selectTodoList(listId: String) {
         viewModelScope.launch {
             preferencesRepository.selectTodoList(listId)
-            _uiState.value = _uiState.value.copy(todoListId = listId)
+            _uiState.value = _uiState.value.copy(todoListId = listId, todoItems = emptyList())
             bindSelectedLists(_uiState.value.availableLists)
         }
     }
 
-    fun addShoppingItem(text: String) = addItem(_uiState.value.shoppingListId, text)
     fun addTodoItem(text: String) = addItem(_uiState.value.todoListId, text)
 
     fun setItemChecked(itemId: String, checked: Boolean) {
         viewModelScope.launch {
             runCatching { listsRepository.setItemChecked(itemId, checked) }
-                .onFailure { error -> _uiState.value = _uiState.value.copy(errorMessage = error.message ?: "Änderung fehlgeschlagen") }
+                .onFailure { reportError(it, "Änderung fehlgeschlagen") }
         }
     }
 
@@ -130,14 +133,16 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         if (listId == null || text.isBlank()) return
         viewModelScope.launch {
             runCatching { listsRepository.addItem(listId, text) }
-                .onFailure { error -> _uiState.value = _uiState.value.copy(errorMessage = error.message ?: "Eintrag konnte nicht gespeichert werden") }
+                .onFailure { reportError(it, "Eintrag konnte nicht gespeichert werden") }
         }
     }
 
     private fun observeLists() {
         listsJob = viewModelScope.launch {
-            listsRepository.observeAvailableLists().collectLatest { lists ->
-                _uiState.value = _uiState.value.copy(availableLists = lists)
+            listsRepository.observeAvailableLists().catch { error ->
+                bindSelectedLists(emptyList())
+                reportError(error, "Listen konnten nicht geladen werden")
+            }.collectLatest { lists ->
                 bindSelectedLists(lists)
             }
         }
@@ -147,17 +152,15 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         val shoppingId = _uiState.value.shoppingListId?.takeIf { id -> lists.any { it.id == id } }
         val todoId = _uiState.value.todoListId?.takeIf { id -> lists.any { it.id == id } }
 
-        _uiState.value = _uiState.value.copy(
-            shoppingListId = shoppingId,
-            todoListId = todoId,
-            shoppingListName = lists.firstOrNull { it.id == shoppingId }?.name,
-            todoListName = lists.firstOrNull { it.id == todoId }?.name,
-        )
+        _uiState.value = _uiState.value.withAvailableLists(lists)
 
         shoppingItemsJob?.cancel()
         shoppingItemsJob = shoppingId?.let { id ->
             viewModelScope.launch {
-                listsRepository.observeItems(id).collectLatest { items ->
+                listsRepository.observeItems(id).catch { error ->
+                    _uiState.value = _uiState.value.copy(shoppingItems = emptyList())
+                    reportError(error, "Einkaufsliste konnte nicht geladen werden")
+                }.collectLatest { items ->
                     _uiState.value = _uiState.value.copy(shoppingItems = items.toUiItems())
                 }
             }
@@ -166,11 +169,20 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         todoItemsJob?.cancel()
         todoItemsJob = todoId?.let { id ->
             viewModelScope.launch {
-                listsRepository.observeItems(id).collectLatest { items ->
+                listsRepository.observeItems(id).catch { error ->
+                    _uiState.value = _uiState.value.copy(todoItems = emptyList())
+                    reportError(error, "Todo-Liste konnte nicht geladen werden")
+                }.collectLatest { items ->
                     _uiState.value = _uiState.value.copy(todoItems = items.toUiItems())
                 }
             }
         }
+    }
+
+    private fun reportError(error: Throwable, fallback: String) {
+        if (error is CancellationException) throw error
+        _uiState.value = _uiState.value.copy(errorMessage = fallback)
+        crashlytics.recordException(error)
     }
 
     private fun List<MeiListItem>.toUiItems(): List<DashboardListItemUiState> =

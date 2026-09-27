@@ -4,6 +4,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentChange
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Source
+import de.haberland.meihome.domain.model.CatalogProduct
 import de.haberland.meihome.domain.model.MeiList
 import de.haberland.meihome.domain.model.MeiListItem
 import java.util.UUID
@@ -37,7 +39,11 @@ class FirebaseListsRepository(
             listListeners[categoryId] = firestore.collection("shopping_lists")
                 .whereEqualTo("categoryId", categoryId)
                 .addSnapshotListener { snapshot, error ->
-                    if (error != null || snapshot == null) return@addSnapshotListener
+                    if (error != null) {
+                        close(error)
+                        return@addSnapshotListener
+                    }
+                    if (snapshot == null) return@addSnapshotListener
                     snapshot.documentChanges.forEach { change ->
                         when (change.type) {
                             DocumentChange.Type.ADDED,
@@ -58,7 +64,12 @@ class FirebaseListsRepository(
         val categoriesListener = firestore.collection("categories")
             .whereArrayContains("allowedUsers", user.uid)
             .addSnapshotListener { snapshot, error ->
-                if (error != null || snapshot == null) return@addSnapshotListener
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                if (snapshot == null) return@addSnapshotListener
+                if (snapshot.isEmpty) publish()
                 snapshot.documentChanges.forEach { change ->
                     val categoryId = change.document.id
                     when (change.type) {
@@ -83,7 +94,11 @@ class FirebaseListsRepository(
         val listener = firestore.collection("list_items")
             .whereEqualTo("listId", listId)
             .addSnapshotListener { snapshot, error ->
-                if (error != null || snapshot == null) return@addSnapshotListener
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                if (snapshot == null) return@addSnapshotListener
                 val items = snapshot.documents.map { doc ->
                     MeiListItem(
                         id = doc.id,
@@ -101,7 +116,22 @@ class FirebaseListsRepository(
         awaitClose { listener.remove() }
     }
 
-    override suspend fun addItem(listId: String, text: String) {
+    override suspend fun loadCatalog(categoryId: String): List<CatalogProduct> =
+        firestore.collection("catalog_products")
+            .whereEqualTo("categoryId", categoryId)
+            // An empty local cache must not be mistaken for a category without a catalog.
+            .get(Source.SERVER)
+            .await()
+            .documents.mapNotNull { document ->
+                val name = document.getString("name")?.trim().orEmpty()
+                if (name.isBlank()) null else CatalogProduct(
+                    id = document.id,
+                    name = name,
+                    defaultArea = document.getString("defaultArea"),
+                )
+            }.sortedBy { it.name.lowercase() }
+
+    override suspend fun addItem(listId: String, text: String, area: String?) {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
         val id = UUID.randomUUID().toString()
@@ -111,7 +141,7 @@ class FirebaseListsRepository(
                 "text" to trimmed,
                 "isChecked" to false,
                 "timestamp" to System.currentTimeMillis(),
-                "area" to null,
+                "area" to area,
             ),
         ).await()
     }

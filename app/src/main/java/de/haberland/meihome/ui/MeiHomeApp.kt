@@ -33,13 +33,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.haberland.meihome.domain.model.MeiList
 import de.haberland.meihome.ui.dashboard.DashboardScreen
 import de.haberland.meihome.ui.dashboard.DashboardViewModel
+import de.haberland.meihome.ui.shopping.ShoppingItemDialog
 
 private enum class ListRole {
     SHOPPING,
@@ -130,14 +131,23 @@ fun MeiHomeApp(
         }
 
         addRole?.let { role ->
-            AddItemDialog(
-                title = if (role == ListRole.SHOPPING) "Einkauf hinzufügen" else "Todo hinzufügen",
-                onAdd = { text ->
-                    if (role == ListRole.SHOPPING) viewModel.addShoppingItem(text) else viewModel.addTodoItem(text)
-                    addRole = null
-                },
-                onDismiss = { addRole = null },
-            )
+            if (role == ListRole.SHOPPING) {
+                val list = state.availableLists.firstOrNull { it.id == state.shoppingListId }
+                if (state.isSignedIn && list != null) {
+                    ShoppingItemDialog(list = list, onDismiss = { addRole = null })
+                } else {
+                    LaunchedEffect(Unit) { addRole = null }
+                }
+            } else {
+                AddItemDialog(
+                    title = "Todo hinzufügen",
+                    onAdd = { text ->
+                        viewModel.addTodoItem(text)
+                        addRole = null
+                    },
+                    onDismiss = { addRole = null },
+                )
+            }
         }
 
         state.errorMessage?.let { message ->
