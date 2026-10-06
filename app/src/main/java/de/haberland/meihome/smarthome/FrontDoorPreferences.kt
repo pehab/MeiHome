@@ -13,7 +13,6 @@ class FrontDoorPreferences(context: Context) {
             .ifBlank { GOOGLE_DEVICE_ACCESS_PROJECT_ID },
         googleDeviceId = preferences.getString(KEY_GOOGLE_DEVICE_ID, "").orEmpty(),
         nukiDeviceId = preferences.getString(KEY_NUKI_DEVICE_ID, "").orEmpty(),
-        nukiAccessToken = preferences.getString(KEY_NUKI_ACCESS_TOKEN, "").orEmpty(),
     )
 
     fun save(config: FrontDoorConfig) {
@@ -21,7 +20,6 @@ class FrontDoorPreferences(context: Context) {
             .putString(KEY_GOOGLE_PROJECT_ID, config.googleProjectId.trim())
             .putString(KEY_GOOGLE_DEVICE_ID, config.googleDeviceId.trim())
             .putString(KEY_NUKI_DEVICE_ID, config.nukiDeviceId.trim())
-            .putString(KEY_NUKI_ACCESS_TOKEN, config.nukiAccessToken.trim())
             .apply()
     }
 
@@ -31,11 +29,12 @@ class FrontDoorPreferences(context: Context) {
     fun setNestRefreshToken(value: String) = secrets.put(SecureSecretStore.NEST_REFRESH_TOKEN, value)
     fun getPubSubRefreshToken(): String = secrets.get(SecureSecretStore.PUBSUB_REFRESH_TOKEN)
     fun setPubSubRefreshToken(value: String) = secrets.put(SecureSecretStore.PUBSUB_REFRESH_TOKEN, value)
+    fun getNukiApiToken(): String = secrets.get(SecureSecretStore.NUKI_API_TOKEN)
+    fun setNukiApiToken(value: String) = secrets.put(SecureSecretStore.NUKI_API_TOKEN, value)
 
     companion object {
         private const val KEY_GOOGLE_PROJECT_ID = "google_project_id"
         private const val KEY_GOOGLE_DEVICE_ID = "google_device_id"
         private const val KEY_NUKI_DEVICE_ID = "nuki_device_id"
-        private const val KEY_NUKI_ACCESS_TOKEN = "nuki_access_token"
     }
 }
