@@ -25,13 +25,16 @@ fun FrontDoorConfigDialog(
     clientSecretConfigured: Boolean,
     googleLinked: Boolean,
     pubSubLinked: Boolean,
+    nukiTokenConfigured: Boolean,
     onConnectGoogle: (String) -> Unit,
     onConnectPubSub: () -> Unit,
     onDiscoverDoorbell: suspend () -> Result<FrontDoorConfig>,
+    onDiscoverNuki: suspend (String) -> Result<FrontDoorConfig>,
     onSave: (FrontDoorConfig) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var clientSecret by remember { mutableStateOf("") }
+    var nukiToken by remember { mutableStateOf("") }
     var discoveredConfig by remember(initial) { mutableStateOf(initial) }
     var statusText by remember(initial, googleLinked) {
         mutableStateOf(
@@ -43,6 +46,16 @@ fun FrontDoorConfigDialog(
         )
     }
     var discovering by remember { mutableStateOf(false) }
+    var discoveringNuki by remember { mutableStateOf(false) }
+    var nukiStatusText by remember(initial) {
+        mutableStateOf(
+            if (initial.nukiDeviceId.isNotBlank()) {
+                "Nuki Smart Lock ist konfiguriert."
+            } else {
+                "Nuki ist noch nicht verbunden."
+            },
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -129,12 +142,70 @@ fun FrontDoorConfigDialog(
                         modifier = Modifier.padding(top = 8.dp),
                     )
                 }
+
+                androidx.compose.material3.HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 14.dp),
+                )
+
+                Text("Nuki", style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
+
+                OutlinedTextField(
+                    value = nukiToken,
+                    onValueChange = { nukiToken = it },
+                    label = {
+                        Text(
+                            if (nukiTokenConfigured) {
+                                "Nuki API Token (bereits gespeichert)"
+                            } else {
+                                "Nuki API Token"
+                            },
+                        )
+                    },
+                    placeholder = {
+                        if (nukiTokenConfigured) {
+                            Text("Leer lassen, um den gespeicherten Token zu behalten")
+                        }
+                    },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                )
+
+                OutlinedButton(
+                    onClick = { discoveringNuki = true },
+                    enabled = (nukiTokenConfigured || nukiToken.isNotBlank()) && !discoveringNuki,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp),
+                ) {
+                    Text(if (discoveringNuki) "Suche..." else "Nuki automatisch suchen")
+                }
+
+                if (discoveringNuki) {
+                    androidx.compose.runtime.LaunchedEffect(Unit) {
+                        onDiscoverNuki(nukiToken.trim())
+                            .onSuccess {
+                                discoveredConfig = it
+                                nukiStatusText = "Nuki Smart Lock gefunden."
+                            }
+                            .onFailure {
+                                nukiStatusText = it.message ?: "Nuki konnte nicht gefunden werden."
+                            }
+                        discoveringNuki = false
+                    }
+                }
+
+                Text(nukiStatusText, modifier = Modifier.padding(top = 8.dp))
             }
         },
         confirmButton = {
             Button(
                 onClick = { onSave(discoveredConfig) },
-                enabled = discoveredConfig.googleDeviceId.isNotBlank() && !discovering,
+                enabled = discoveredConfig.googleDeviceId.isNotBlank() &&
+                    !discovering &&
+                    !discoveringNuki,
             ) {
                 Text("Speichern")
             }
