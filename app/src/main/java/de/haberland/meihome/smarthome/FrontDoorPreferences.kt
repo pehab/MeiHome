@@ -6,7 +6,10 @@ class FrontDoorPreferences(context: Context) {
     private val preferences = context.getSharedPreferences("front_door", Context.MODE_PRIVATE)
 
     fun load(): FrontDoorConfig = FrontDoorConfig(
-        googleProjectId = preferences.getString(KEY_GOOGLE_PROJECT_ID, "").orEmpty(),
+        googleProjectId = preferences
+            .getString(KEY_GOOGLE_PROJECT_ID, GOOGLE_DEVICE_ACCESS_PROJECT_ID)
+            .orEmpty()
+            .ifBlank { GOOGLE_DEVICE_ACCESS_PROJECT_ID },
         googleDeviceId = preferences.getString(KEY_GOOGLE_DEVICE_ID, "").orEmpty(),
         googleAccessToken = preferences.getString(KEY_GOOGLE_ACCESS_TOKEN, "").orEmpty(),
         nukiDeviceId = preferences.getString(KEY_NUKI_DEVICE_ID, "").orEmpty(),
