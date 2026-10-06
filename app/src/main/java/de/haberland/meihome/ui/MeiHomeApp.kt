@@ -42,6 +42,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.haberland.meihome.domain.model.MeiList
+import de.haberland.meihome.smarthome.DoorbellEventClient
 import de.haberland.meihome.smarthome.DoorbellStreamStatus
 import de.haberland.meihome.smarthome.DoorbellWebRtcController
 import de.haberland.meihome.smarthome.FrontDoorPreferences
@@ -49,11 +50,14 @@ import de.haberland.meihome.smarthome.GOOGLE_DEVICE_ACCESS_PROJECT_ID
 import de.haberland.meihome.smarthome.GoogleSdmDoorbellClient
 import de.haberland.meihome.smarthome.NestOAuthManager
 import de.haberland.meihome.smarthome.NestTokenManager
+import de.haberland.meihome.smarthome.PubSubOAuthManager
+import de.haberland.meihome.smarthome.PubSubTokenManager
 import de.haberland.meihome.ui.dashboard.DashboardScreen
 import de.haberland.meihome.ui.dashboard.DashboardViewModel
 import de.haberland.meihome.ui.dashboard.components.FrontDoorConfigDialog
 import de.haberland.meihome.ui.dashboard.components.FrontDoorDialog
 import de.haberland.meihome.ui.shopping.ShoppingItemDialog
+import kotlinx.coroutines.delay
 
 private enum class ListRole {
     SHOPPING,
@@ -74,6 +78,11 @@ fun MeiHomeApp(
     val frontDoorPreferences = remember(context) { FrontDoorPreferences(context) }
     val nestOAuthManager = remember(frontDoorPreferences) { NestOAuthManager(frontDoorPreferences) }
     val nestTokenManager = remember(nestOAuthManager) { NestTokenManager(nestOAuthManager) }
+    val pubSubOAuthManager = remember(frontDoorPreferences) { PubSubOAuthManager(frontDoorPreferences) }
+    val pubSubTokenManager = remember(pubSubOAuthManager) { PubSubTokenManager(pubSubOAuthManager) }
+    val doorbellEventClient = remember(pubSubTokenManager) {
+        DoorbellEventClient(pubSubTokenManager::accessToken)
+    }
     var frontDoorConfig by remember { mutableStateOf(frontDoorPreferences.load()) }
     var streamStatus by remember { mutableStateOf<DoorbellStreamStatus>(DoorbellStreamStatus.Idle) }
     var nestSetupMessage by remember { mutableStateOf<String?>(null) }
@@ -134,28 +143,63 @@ fun MeiHomeApp(
                 return@LaunchedEffect
             }
 
-            runCatching {
-                val tokenResponse = nestOAuthManager.exchangeAuthorizationCode(code)
-                nestTokenManager.acceptInitial(tokenResponse)
+            val stateValue = callback.getQueryParameter("state")
+            if (stateValue == PubSubOAuthManager.STATE) {
+                runCatching {
+                    val tokenResponse = pubSubOAuthManager.exchangeAuthorizationCode(code)
+                    pubSubTokenManager.acceptInitial(tokenResponse)
+                    doorbellEventClient.ensureSubscription()
+                    nestSetupMessage = "Klingelereignisse sind verbunden."
+                }.onFailure {
+                    nestSetupMessage = it.message ?: "Klingelereignisse konnten nicht verbunden werden."
+                }
+            } else {
+                runCatching {
+                    val tokenResponse = nestOAuthManager.exchangeAuthorizationCode(code)
+                    nestTokenManager.acceptInitial(tokenResponse)
 
-                val discovered = GoogleSdmDoorbellClient(
-                    configProvider = { frontDoorConfig.copy(googleDeviceId = "") },
-                    accessTokenProvider = nestTokenManager::accessToken,
-                ).listDoorbells().firstOrNull { it.supportsWebRtc }
-                    ?: error("Keine WebRTC-fähige Google Doorbell gefunden.")
+                    val discovered = GoogleSdmDoorbellClient(
+                        configProvider = { frontDoorConfig.copy(googleDeviceId = "") },
+                        accessTokenProvider = nestTokenManager::accessToken,
+                    ).listDoorbells().firstOrNull { it.supportsWebRtc }
+                        ?: error("Keine WebRTC-fähige Google Doorbell gefunden.")
 
-                val updated = frontDoorConfig.copy(
-                    googleProjectId = GOOGLE_DEVICE_ACCESS_PROJECT_ID,
-                    googleDeviceId = discovered.id,
-                )
-                frontDoorPreferences.save(updated)
-                frontDoorConfig = updated
-                nestSetupMessage = "Google Doorbell verbunden."
-            }.onFailure {
-                nestSetupMessage = it.message ?: "Google Home konnte nicht verbunden werden."
+                    val updated = frontDoorConfig.copy(
+                        googleProjectId = GOOGLE_DEVICE_ACCESS_PROJECT_ID,
+                        googleDeviceId = discovered.id,
+                    )
+                    frontDoorPreferences.save(updated)
+                    frontDoorConfig = updated
+                    nestSetupMessage = "Google Doorbell verbunden."
+                }.onFailure {
+                    nestSetupMessage = it.message ?: "Google Home konnte nicht verbunden werden."
+                }
             }
         } finally {
             onNestOAuthCallbackConsumed()
+        }
+    }
+
+    LaunchedEffect(
+        frontDoorConfig.googleDeviceId,
+        pubSubOAuthManager.isLinked(),
+        doorbellEventClient,
+    ) {
+        if (frontDoorConfig.googleDeviceId.isBlank() || !pubSubOAuthManager.isLinked()) {
+            return@LaunchedEffect
+        }
+
+        runCatching { doorbellEventClient.ensureSubscription() }
+
+        while (true) {
+            runCatching {
+                doorbellEventClient.pullChime(frontDoorConfig.googleDeviceId)
+            }.onSuccess { chime ->
+                if (chime) {
+                    frontDoorOpen = true
+                }
+            }
+            delay(2_000L)
         }
     }
 
@@ -206,12 +250,18 @@ fun MeiHomeApp(
                 initial = frontDoorConfig,
                 clientSecretConfigured = frontDoorPreferences.getNestClientSecret().isNotBlank(),
                 googleLinked = nestOAuthManager.isLinked(),
+                pubSubLinked = pubSubOAuthManager.isLinked(),
                 onConnectGoogle = { enteredSecret ->
                     if (enteredSecret.isNotBlank()) {
                         frontDoorPreferences.setNestClientSecret(enteredSecret)
                     }
                     activity?.startActivity(
                         Intent(Intent.ACTION_VIEW, nestOAuthManager.authorizationUri()),
+                    )
+                },
+                onConnectPubSub = {
+                    activity?.startActivity(
+                        Intent(Intent.ACTION_VIEW, pubSubOAuthManager.authorizationUri()),
                     )
                 },
                 onDiscoverDoorbell = {
