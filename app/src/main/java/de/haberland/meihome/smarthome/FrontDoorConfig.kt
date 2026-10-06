@@ -12,13 +12,12 @@ data class FrontDoorConfig(
     val googleProjectId: String = GOOGLE_DEVICE_ACCESS_PROJECT_ID,
     val googleDeviceId: String = "",
     val nukiDeviceId: String = "",
-    val nukiAccessToken: String = "",
 ) {
     val googleConfigured: Boolean
         get() = googleDeviceId.isNotBlank()
 
     val nukiConfigured: Boolean
-        get() = nukiDeviceId.isNotBlank() && nukiAccessToken.isNotBlank()
+        get() = nukiDeviceId.isNotBlank()
 }
 
 enum class DoorAction {
