@@ -8,11 +8,24 @@ import com.google.firebase.firestore.Source
 import de.haberland.meihome.domain.model.CatalogProduct
 import de.haberland.meihome.domain.model.MeiList
 import de.haberland.meihome.domain.model.MeiListItem
+import java.time.Instant
+import java.time.ZoneId
 import java.util.UUID
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+
+private data class RemoteListItem(
+    val id: String,
+    val text: String,
+    val isChecked: Boolean,
+    val area: String?,
+    val repeatEveryDays: Int?,
+    val nextDueAt: Long?,
+)
 
 class FirebaseListsRepository(
     private val auth: FirebaseAuth = FirebaseAuth.getInstance(),
@@ -91,6 +104,28 @@ class FirebaseListsRepository(
     }
 
     override fun observeItems(listId: String): Flow<List<MeiListItem>> = callbackFlow {
+        var remoteItems = emptyList<RemoteListItem>()
+
+        fun publish() {
+            val now = System.currentTimeMillis()
+            val items = remoteItems.map { item ->
+                val recurrenceDue = item.repeatEveryDays != null &&
+                    item.nextDueAt != null &&
+                    item.nextDueAt <= now
+                MeiListItem(
+                    id = item.id,
+                    listId = listId,
+                    text = item.text,
+                    isChecked = item.isChecked && !recurrenceDue,
+                    area = item.area,
+                )
+            }.sortedWith(
+                compareBy<MeiListItem> { it.isChecked }
+                    .thenBy { it.text.lowercase() },
+            )
+            trySend(items)
+        }
+
         val listener = firestore.collection("list_items")
             .whereEqualTo("listId", listId)
             .addSnapshotListener { snapshot, error ->
@@ -99,21 +134,35 @@ class FirebaseListsRepository(
                     return@addSnapshotListener
                 }
                 if (snapshot == null) return@addSnapshotListener
-                val items = snapshot.documents.map { doc ->
-                    MeiListItem(
+
+                remoteItems = snapshot.documents.map { doc ->
+                    RemoteListItem(
                         id = doc.id,
-                        listId = listId,
                         text = doc.getString("text").orEmpty(),
                         isChecked = doc.getBoolean("isChecked") ?: false,
                         area = doc.getString("area"),
+                        repeatEveryDays = doc.getLong("repeatEveryDays")
+                            ?.takeIf { it in 1L..3650L }
+                            ?.toInt(),
+                        nextDueAt = doc.getLong("nextDueAt"),
                     )
-                }.sortedWith(
-                    compareBy<MeiListItem> { it.isChecked }
-                        .thenBy { it.text.lowercase() },
-                )
-                trySend(items)
+                }
+                publish()
             }
-        awaitClose { listener.remove() }
+
+        // A due recurrence does not change the Firestore document itself, so refresh
+        // the effective checked state while the wall tablet stays open.
+        val recurrenceClock = launch {
+            while (true) {
+                delay(15_000)
+                publish()
+            }
+        }
+
+        awaitClose {
+            recurrenceClock.cancel()
+            listener.remove()
+        }
     }
 
     override suspend fun loadCatalog(categoryId: String): List<CatalogProduct> =
@@ -147,8 +196,37 @@ class FirebaseListsRepository(
     }
 
     override suspend fun setItemChecked(itemId: String, checked: Boolean) {
-        firestore.collection("list_items").document(itemId)
-            .update("isChecked", checked)
-            .await()
+        val document = firestore.collection("list_items").document(itemId)
+        firestore.runTransaction { transaction ->
+            val snapshot = transaction.get(document)
+            val repeatEveryDays = snapshot.getLong("repeatEveryDays")
+                ?.takeIf { it in 1L..3650L }
+                ?.toInt()
+            val nextDueAt = if (checked && repeatEveryDays != null) {
+                nextRepeatDueAt(repeatEveryDays, System.currentTimeMillis())
+            } else {
+                null
+            }
+
+            transaction.update(
+                document,
+                mapOf(
+                    "isChecked" to checked,
+                    "nextDueAt" to nextDueAt,
+                ),
+            )
+        }.await()
     }
+
+    private fun nextRepeatDueAt(days: Int, completedAt: Long): Long {
+        val zone = ZoneId.systemDefault()
+        return Instant.ofEpochMilli(completedAt)
+            .atZone(zone)
+            .toLocalDate()
+            .plusDays(days.toLong())
+            .atStartOfDay(zone)
+            .toInstant()
+            .toEpochMilli()
+    }
+
 }
