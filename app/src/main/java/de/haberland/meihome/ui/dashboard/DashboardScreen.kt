@@ -28,6 +28,7 @@ import de.haberland.meihome.ui.dashboard.components.SmartHomeBar
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
@@ -161,7 +162,16 @@ private fun CalendarCard(
             val zone = ZoneId.systemDefault()
             val today = LocalDate.now(zone)
             val grouped = state.calendarEvents.groupBy { event ->
-                Instant.ofEpochMilli(event.startMillis).atZone(zone).toLocalDate()
+                if (event.allDay) {
+                    // Android stores all-day boundaries as UTC midnights. Interpret
+                    // them as calendar dates rather than shifting them through the
+                    // tablet's local time zone.
+                    Instant.ofEpochMilli(event.startMillis)
+                        .atZone(ZoneOffset.UTC)
+                        .toLocalDate()
+                } else {
+                    Instant.ofEpochMilli(event.startMillis).atZone(zone).toLocalDate()
+                }
             }
 
             LazyColumn(
