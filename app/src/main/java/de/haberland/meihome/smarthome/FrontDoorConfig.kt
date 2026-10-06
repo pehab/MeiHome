@@ -1,23 +1,21 @@
 package de.haberland.meihome.smarthome
 
-/**
- * Connection details for the front-door integrations.
- *
- * Secrets are deliberately not hard-coded in the application. The UI can persist
- * these values locally once the respective Google Device Access and Nuki accounts
- * have been authorized.
- */
 const val GOOGLE_DEVICE_ACCESS_PROJECT_ID = "9ae59f3c-8dbc-4551-9190-35eb9fe39db7"
+const val GOOGLE_NEST_OAUTH_CLIENT_ID =
+    "360704856415-5l8u5an59m09duis3bl4cmphrl37o08o.apps.googleusercontent.com"
+const val GOOGLE_NEST_REDIRECT_URI =
+    "https://pehab.github.io/MeiHome/oauth-callback.html"
+const val GOOGLE_NEST_CALLBACK_SCHEME = "meihome"
+const val GOOGLE_NEST_CALLBACK_HOST = "nest-auth"
 
 data class FrontDoorConfig(
     val googleProjectId: String = GOOGLE_DEVICE_ACCESS_PROJECT_ID,
     val googleDeviceId: String = "",
-    val googleAccessToken: String = "",
     val nukiDeviceId: String = "",
     val nukiAccessToken: String = "",
 ) {
     val googleConfigured: Boolean
-        get() = googleProjectId.isNotBlank() && googleDeviceId.isNotBlank()
+        get() = googleDeviceId.isNotBlank()
 
     val nukiConfigured: Boolean
         get() = nukiDeviceId.isNotBlank() && nukiAccessToken.isNotBlank()
