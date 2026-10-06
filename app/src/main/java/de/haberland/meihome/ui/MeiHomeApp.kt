@@ -44,7 +44,7 @@ import de.haberland.meihome.smarthome.DoorbellStreamStatus
 import de.haberland.meihome.smarthome.DoorbellWebRtcController
 import de.haberland.meihome.smarthome.FrontDoorPreferences
 import de.haberland.meihome.smarthome.GOOGLE_DEVICE_ACCESS_PROJECT_ID
-import de.haberland.meihome.smarthome.GoogleSdmDoorbellClient
+import de.haberland.meihome.smarthome.FirebaseDoorbellClient
 import de.haberland.meihome.ui.dashboard.DashboardScreen
 import de.haberland.meihome.ui.dashboard.DashboardViewModel
 import de.haberland.meihome.ui.dashboard.components.FrontDoorConfigDialog
@@ -69,12 +69,8 @@ fun MeiHomeApp(
     var frontDoorConfig by remember { mutableStateOf(frontDoorPreferences.load()) }
     var streamStatus by remember { mutableStateOf<DoorbellStreamStatus>(DoorbellStreamStatus.Idle) }
     val frontDoorScope = rememberCoroutineScope()
-    val doorbellClient = remember(
-        frontDoorConfig.googleProjectId,
-        frontDoorConfig.googleDeviceId,
-        frontDoorConfig.googleAccessToken,
-    ) {
-        GoogleSdmDoorbellClient { frontDoorConfig }
+    val doorbellClient = remember(frontDoorConfig.googleDeviceId) {
+        FirebaseDoorbellClient { frontDoorConfig }
     }
     val webRtcController = remember(doorbellClient) {
         DoorbellWebRtcController(
@@ -155,22 +151,17 @@ fun MeiHomeApp(
         if (frontDoorSettingsOpen) {
             FrontDoorConfigDialog(
                 initial = frontDoorConfig,
-                onDiscoverDoorbell = { accessToken ->
+                onDiscoverDoorbell = {
                     runCatching {
                         val discoveryConfig = frontDoorConfig.copy(
                             googleProjectId = GOOGLE_DEVICE_ACCESS_PROJECT_ID,
                             googleDeviceId = "",
-                            googleAccessToken = accessToken,
+                            googleAccessToken = "",
                         )
-                        val discoveryClient = GoogleSdmDoorbellClient { discoveryConfig }
-                        val doorbells = discoveryClient.listDoorbells()
-                            .filter { it.supportsWebRtc }
-                        require(doorbells.isNotEmpty()) {
-                            "Keine WebRTC-fähige Google Doorbell gefunden."
-                        }
-                        discoveryConfig.copy(
-                            googleDeviceId = doorbells.first().id,
-                        )
+                        val discoveryClient = FirebaseDoorbellClient { discoveryConfig }
+                        val doorbells = discoveryClient.listDoorbells().filter { it.supportsWebRtc }
+                        require(doorbells.isNotEmpty()) { "Keine WebRTC-fähige Google Doorbell gefunden." }
+                        discoveryConfig.copy(googleDeviceId = doorbells.first().id)
                     }
                 },
                 onSave = { config ->
