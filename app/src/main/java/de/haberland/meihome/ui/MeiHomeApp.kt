@@ -129,6 +129,8 @@ fun MeiHomeApp(
     var updatePromptDismissed by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
     var frontDoorOpen by remember { mutableStateOf(false) }
+    var frontDoorOpenedByChime by remember { mutableStateOf(false) }
+    var doorbellChimeSequence by remember { mutableStateOf(0L) }
     var frontDoorSettingsOpen by remember { mutableStateOf(false) }
     var selectingRole by remember { mutableStateOf<ListRole?>(null) }
     var addRole by remember { mutableStateOf<ListRole?>(null) }
@@ -284,12 +286,34 @@ fun MeiHomeApp(
                                     activeDoorbellRingtone = null
                                 }
                             }
+                            frontDoorOpenedByChime = true
+                            doorbellChimeSequence += 1L
                             frontDoorOpen = true
                         }
                     }
                 }
             }
             delay(2_000L)
+        }
+    }
+
+    LaunchedEffect(
+        frontDoorOpen,
+        frontDoorOpenedByChime,
+        doorbellChimeSequence,
+        displaySettings.doorbellAutoCloseMinutes,
+    ) {
+        if (!frontDoorOpen || !frontDoorOpenedByChime) {
+            return@LaunchedEffect
+        }
+
+        delay(displaySettings.doorbellAutoCloseMinutes * 60_000L)
+
+        if (frontDoorOpen && frontDoorOpenedByChime) {
+            activeDoorbellRingtone?.stop()
+            activeDoorbellRingtone = null
+            frontDoorOpenedByChime = false
+            frontDoorOpen = false
         }
     }
 
@@ -344,7 +368,10 @@ fun MeiHomeApp(
                 onRequestCalendarPermission = {
                     calendarPermissionLauncher.launch(Manifest.permission.READ_CALENDAR)
                 },
-                onOpenFrontDoor = { frontDoorOpen = true },
+                onOpenFrontDoor = {
+                    frontDoorOpenedByChime = false
+                    frontDoorOpen = true
+                },
                 onOpenSettings = { settingsOpen = true },
             )
         }
@@ -387,6 +414,7 @@ fun MeiHomeApp(
                 onDismiss = {
                     activeDoorbellRingtone?.stop()
                     activeDoorbellRingtone = null
+                    frontDoorOpenedByChime = false
                     frontDoorOpen = false
                 },
             )
@@ -698,6 +726,37 @@ private fun SettingsDialog(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text("Klingelton: $doorbellRingtoneName")
+                    }
+
+                    Text(
+                        text = "Haustür nach Klingeln automatisch schließen",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        listOf(5, 10, 15).forEach { minutes ->
+                            TextButton(
+                                onClick = {
+                                    onDisplaySettingsChange(
+                                        displaySettings.copy(
+                                            doorbellAutoCloseMinutes = minutes,
+                                        ),
+                                    )
+                                },
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text(
+                                    if (displaySettings.doorbellAutoCloseMinutes == minutes) {
+                                        "$minutes min ✓"
+                                    } else {
+                                        "$minutes min"
+                                    },
+                                )
+                            }
+                        }
                     }
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
