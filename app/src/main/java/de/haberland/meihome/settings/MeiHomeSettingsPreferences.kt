@@ -7,6 +7,7 @@ data class MeiHomeDisplaySettings(
     val nightStartMinutes: Int = 22 * 60,
     val nightEndMinutes: Int = 6 * 60,
     val doorbellRingtoneUri: String = "",
+    val doorbellAutoCloseMinutes: Int = 5,
 )
 
 class MeiHomeSettingsPreferences(context: Context) {
@@ -18,6 +19,8 @@ class MeiHomeSettingsPreferences(context: Context) {
         nightStartMinutes = preferences.getInt(KEY_NIGHT_START, 22 * 60),
         nightEndMinutes = preferences.getInt(KEY_NIGHT_END, 6 * 60),
         doorbellRingtoneUri = preferences.getString(KEY_DOORBELL_RINGTONE, "").orEmpty(),
+        doorbellAutoCloseMinutes = preferences.getInt(KEY_DOORBELL_AUTO_CLOSE, 5)
+            .coerceIn(5, 15),
     )
 
     fun save(settings: MeiHomeDisplaySettings) {
@@ -26,6 +29,10 @@ class MeiHomeSettingsPreferences(context: Context) {
             .putInt(KEY_NIGHT_START, settings.nightStartMinutes)
             .putInt(KEY_NIGHT_END, settings.nightEndMinutes)
             .putString(KEY_DOORBELL_RINGTONE, settings.doorbellRingtoneUri)
+            .putInt(
+                KEY_DOORBELL_AUTO_CLOSE,
+                settings.doorbellAutoCloseMinutes.coerceIn(5, 15),
+            )
             .apply()
     }
 
@@ -34,6 +41,7 @@ class MeiHomeSettingsPreferences(context: Context) {
         private const val KEY_NIGHT_START = "night_start"
         private const val KEY_NIGHT_END = "night_end"
         private const val KEY_DOORBELL_RINGTONE = "doorbell_ringtone"
+        private const val KEY_DOORBELL_AUTO_CLOSE = "doorbell_auto_close_minutes"
     }
 }
 
