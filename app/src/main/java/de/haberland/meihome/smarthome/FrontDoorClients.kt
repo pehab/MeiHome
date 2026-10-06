@@ -7,6 +7,7 @@ package de.haberland.meihome.smarthome
 interface DoorbellClient {
     suspend fun listDoorbells(): List<DoorbellDevice>
     suspend fun createWebRtcSession(offerSdp: String): WebRtcSession
+    suspend fun extendWebRtcSession(mediaSessionId: String): String
     suspend fun stopWebRtcSession(mediaSessionId: String)
 }
 
