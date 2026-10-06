@@ -8,18 +8,19 @@ import org.json.JSONObject
 
 class GoogleSdmDoorbellClient(
     private val configProvider: () -> FrontDoorConfig,
+    private val accessTokenProvider: suspend () -> String,
 ) : DoorbellClient {
 
     override suspend fun listDoorbells(): List<DoorbellDevice> = withContext(Dispatchers.IO) {
         val config = configProvider()
         require(config.googleProjectId.isNotBlank()) { "Google Project ID fehlt" }
-        require(config.googleAccessToken.isNotBlank()) { "Google Access Token fehlt" }
+        require(accessTokenProvider().isNotBlank()) { "Google Access Token fehlt" }
 
         val json = request(
             method = "GET",
             url = "https://smartdevicemanagement.googleapis.com/v1/enterprises/" +
                 config.googleProjectId + "/devices",
-            accessToken = config.googleAccessToken,
+            accessToken = accessTokenProvider(),
         )
         val devices = json.optJSONArray("devices") ?: return@withContext emptyList()
 
@@ -56,7 +57,7 @@ class GoogleSdmDoorbellClient(
                 deviceName = deviceName,
                 command = "sdm.devices.commands.CameraLiveStream.GenerateWebRtcStream",
                 params = JSONObject().put("offerSdp", offerSdp),
-                accessToken = config.googleAccessToken,
+                accessToken = accessTokenProvider(),
             ).getJSONObject("results")
 
             WebRtcSession(
@@ -73,7 +74,7 @@ class GoogleSdmDoorbellClient(
                 deviceName = normalizedDeviceName(config),
                 command = "sdm.devices.commands.CameraLiveStream.ExtendWebRtcStream",
                 params = JSONObject().put("mediaSessionId", mediaSessionId),
-                accessToken = config.googleAccessToken,
+                accessToken = accessTokenProvider(),
             ).getJSONObject("results").optString("expiresAt")
         }
 
@@ -84,13 +85,13 @@ class GoogleSdmDoorbellClient(
                 deviceName = normalizedDeviceName(config),
                 command = "sdm.devices.commands.CameraLiveStream.StopWebRtcStream",
                 params = JSONObject().put("mediaSessionId", mediaSessionId),
-                accessToken = config.googleAccessToken,
+                accessToken = accessTokenProvider(),
             )
         }
     }
 
     private fun normalizedDeviceName(config: FrontDoorConfig): String {
-        require(config.googleAccessToken.isNotBlank()) { "Google Access Token fehlt" }
+        require(accessTokenProvider().isNotBlank()) { "Google Access Token fehlt" }
         require(config.googleDeviceId.isNotBlank()) { "Google Doorbell Device fehlt" }
         return if (config.googleDeviceId.startsWith("enterprises/")) {
             config.googleDeviceId
