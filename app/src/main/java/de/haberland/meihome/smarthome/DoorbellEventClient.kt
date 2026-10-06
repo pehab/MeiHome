@@ -11,10 +11,12 @@ private const val PUBSUB_PROJECT_ID = "meicaller-489908"
 private const val PUBSUB_TOPIC_ID = "meihome-doorbell-events"
 private const val PUBSUB_SUBSCRIPTION_ID = "meihome-doorbell-events-meihome"
 private const val CHIME_EVENT = "sdm.devices.events.DoorbellChime.Chime"
+private const val MAX_PROCESSED_MESSAGES = 100
 
 class DoorbellEventClient(
     private val accessTokenProvider: suspend () -> String,
 ) {
+    private val processedMessageIds = LinkedHashSet<String>()
     suspend fun ensureSubscription() = withContext(Dispatchers.IO) {
         val token = accessTokenProvider()
         val subscription =
@@ -55,10 +57,13 @@ class DoorbellEventClient(
             val item = received.optJSONObject(index) ?: continue
             item.optString("ackId").takeIf { it.isNotBlank() }?.let(ackIds::add)
 
-            val encoded = item
-                .optJSONObject("message")
-                ?.optString("data")
-                .orEmpty()
+            val message = item.optJSONObject("message") ?: continue
+            val messageId = message.optString("messageId")
+            if (messageId.isNotBlank() && messageId in processedMessageIds) {
+                continue
+            }
+
+            val encoded = message.optString("data")
             if (encoded.isBlank()) continue
 
             val payload = runCatching {
@@ -71,6 +76,9 @@ class DoorbellEventClient(
             val events = resourceUpdate.optJSONObject("events") ?: continue
             if (events.has(CHIME_EVENT)) {
                 chimeFound = true
+                if (messageId.isNotBlank()) {
+                    rememberProcessed(messageId)
+                }
             }
         }
 
@@ -85,6 +93,14 @@ class DoorbellEventClient(
         }
 
         chimeFound
+    }
+
+    private fun rememberProcessed(messageId: String) {
+        processedMessageIds.add(messageId)
+        while (processedMessageIds.size > MAX_PROCESSED_MESSAGES) {
+            val oldest = processedMessageIds.firstOrNull() ?: break
+            processedMessageIds.remove(oldest)
+        }
     }
 
     private fun request(
