@@ -26,7 +26,7 @@ import org.webrtc.VideoTrack
 
 class DoorbellWebRtcController(
     context: Context,
-    private val client: GoogleSdmDoorbellClient,
+    private val client: DoorbellClient,
     private val scope: CoroutineScope,
     private val onStatusChanged: (DoorbellStreamStatus) -> Unit,
 ) {
