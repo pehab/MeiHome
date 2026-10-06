@@ -66,7 +66,7 @@ class GoogleSdmDoorbellClient(
             )
         }
 
-    suspend fun extendWebRtcSession(mediaSessionId: String): String =
+    override suspend fun extendWebRtcSession(mediaSessionId: String): String =
         withContext(Dispatchers.IO) {
             val config = configProvider()
             executeCommand(
