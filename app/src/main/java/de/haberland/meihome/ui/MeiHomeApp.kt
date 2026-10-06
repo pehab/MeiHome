@@ -40,6 +40,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import de.haberland.meihome.domain.model.MeiList
 import de.haberland.meihome.ui.dashboard.DashboardScreen
 import de.haberland.meihome.ui.dashboard.DashboardViewModel
+import de.haberland.meihome.ui.dashboard.components.FrontDoorDialog
 import de.haberland.meihome.ui.shopping.ShoppingItemDialog
 
 private enum class ListRole {
@@ -58,6 +59,7 @@ fun MeiHomeApp(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var updatePromptDismissed by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
+    var frontDoorOpen by remember { mutableStateOf(false) }
     var selectingRole by remember { mutableStateOf<ListRole?>(null) }
     var addRole by remember { mutableStateOf<ListRole?>(null) }
     val calendarPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -95,7 +97,14 @@ fun MeiHomeApp(
                 onRequestCalendarPermission = {
                     calendarPermissionLauncher.launch(Manifest.permission.READ_CALENDAR)
                 },
+                onOpenFrontDoor = { frontDoorOpen = true },
                 onOpenSettings = { settingsOpen = true },
+            )
+        }
+
+        if (frontDoorOpen) {
+            FrontDoorDialog(
+                onDismiss = { frontDoorOpen = false },
             )
         }
 
