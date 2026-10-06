@@ -7,8 +7,10 @@ package de.haberland.meihome.smarthome
  * these values locally once the respective Google Device Access and Nuki accounts
  * have been authorized.
  */
+const val GOOGLE_DEVICE_ACCESS_PROJECT_ID = "9ae59f3c-8dbc-4551-9190-35eb9fe39db7"
+
 data class FrontDoorConfig(
-    val googleProjectId: String = "",
+    val googleProjectId: String = GOOGLE_DEVICE_ACCESS_PROJECT_ID,
     val googleDeviceId: String = "",
     val googleAccessToken: String = "",
     val nukiDeviceId: String = "",
