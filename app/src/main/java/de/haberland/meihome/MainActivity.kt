@@ -1,6 +1,8 @@
 package de.haberland.meihome
 
 import android.app.Activity
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -25,6 +27,7 @@ import de.haberland.meihome.ui.MeiHomeApp
 class MainActivity : ComponentActivity() {
     private lateinit var appUpdateManager: AppUpdateManager
     private var updateReadyToInstall by mutableStateOf(false)
+    private var nestOAuthCallback by mutableStateOf<Uri?>(null)
 
     private val updateLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
@@ -51,6 +54,8 @@ class MainActivity : ComponentActivity() {
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
 
+        handleNestOAuthIntent(intent)
+
         appUpdateManager = AppUpdateManagerFactory.create(this)
         appUpdateManager.registerListener(installStateUpdatedListener)
         checkForFlexibleUpdate()
@@ -59,8 +64,16 @@ class MainActivity : ComponentActivity() {
             MeiHomeApp(
                 updateReadyToInstall = updateReadyToInstall,
                 onInstallUpdate = { appUpdateManager.completeUpdate() },
+                nestOAuthCallback = nestOAuthCallback,
+                onNestOAuthCallbackConsumed = { nestOAuthCallback = null },
             )
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNestOAuthIntent(intent)
     }
 
     override fun onResume() {
@@ -79,6 +92,13 @@ class MainActivity : ComponentActivity() {
             appUpdateManager.unregisterListener(installStateUpdatedListener)
         }
         super.onDestroy()
+    }
+
+    private fun handleNestOAuthIntent(intent: Intent?) {
+        val data = intent?.data ?: return
+        if (data.scheme == "meihome" && data.host == "nest-auth") {
+            nestOAuthCallback = data
+        }
     }
 
     private fun checkForFlexibleUpdate() {
