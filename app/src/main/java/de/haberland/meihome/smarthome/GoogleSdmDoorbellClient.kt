@@ -14,13 +14,14 @@ class GoogleSdmDoorbellClient(
     override suspend fun listDoorbells(): List<DoorbellDevice> = withContext(Dispatchers.IO) {
         val config = configProvider()
         require(config.googleProjectId.isNotBlank()) { "Google Project ID fehlt" }
-        require(accessTokenProvider().isNotBlank()) { "Google Access Token fehlt" }
+        val accessToken = accessTokenProvider()
+        require(accessToken.isNotBlank()) { "Google Access Token fehlt" }
 
         val json = request(
             method = "GET",
             url = "https://smartdevicemanagement.googleapis.com/v1/enterprises/" +
                 config.googleProjectId + "/devices",
-            accessToken = accessTokenProvider(),
+            accessToken = accessToken,
         )
         val devices = json.optJSONArray("devices") ?: return@withContext emptyList()
 
@@ -91,7 +92,6 @@ class GoogleSdmDoorbellClient(
     }
 
     private fun normalizedDeviceName(config: FrontDoorConfig): String {
-        require(accessTokenProvider().isNotBlank()) { "Google Access Token fehlt" }
         require(config.googleDeviceId.isNotBlank()) { "Google Doorbell Device fehlt" }
         return if (config.googleDeviceId.startsWith("enterprises/")) {
             config.googleDeviceId
