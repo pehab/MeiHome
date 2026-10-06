@@ -1,7 +1,7 @@
 # MeiHome
 
 Familien-Dashboard für ein Android-Wandtablet mit MeiLists, Kalender und Haustürsteuerung.
-Aktueller Stand: **0.6.9**, `versionCode 20`; Paket `de.haberland.meihome`.
+Aktueller Stand: **0.6.10**, `versionCode 21`; Paket `de.haberland.meihome`.
 
 ## Funktionen
 
@@ -14,6 +14,7 @@ Aktueller Stand: **0.6.9**, `versionCode 20`; Paket `de.haberland.meihome`.
 - **Google Nest Doorbell**: WebRTC-Livestream im Haustürdialog.
 - **Klingelereignisse** über Google Smart Device Management / Cloud Pub/Sub; ein Klingeln kann den Haustürdialog automatisch öffnen.
 - Wählbarer Android-Klingelton für Klingelereignisse mit Begrenzung und Event-Deduplizierung.
+- Durch Klingeln automatisch geöffnete Haustürdialoge schließen nach einstellbaren 5, 10 oder 15 Minuten selbstständig und beenden damit den WebRTC-Stream; manuell geöffnete Dialoge bleiben offen.
 - **Nuki Web API**: Schlossstatus, Aufsperren, Zusperren, Falle ziehen und Lock ’n’ Go.
 - Einstellbarer **Nachtmodus**: Klingelereignisse bleiben lautlos, das Display wird abgedunkelt und darf in den Android-Standby wechseln.
 - OAuth-Client-Secret, Refresh-Tokens und Nuki-API-Token werden lokal über den Android Keystore verschlüsselt gespeichert.
