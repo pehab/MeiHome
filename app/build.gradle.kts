@@ -13,8 +13,8 @@ android {
         applicationId = "de.haberland.meihome"
         minSdk = 26
         targetSdk = 37
-        versionCode = 14
-        versionName = "0.6.3"
+        versionCode = 15
+        versionName = "0.6.4"
     }
 
     compileOptions {
@@ -50,7 +50,6 @@ dependencies {
     implementation(libs.firebase.crashlytics)
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
-    implementation("com.google.firebase:firebase-functions")
     implementation(libs.kotlinx.coroutines.play.services)
     implementation("io.github.webrtc-sdk:android:150.7871.01")
 
