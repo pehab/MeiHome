@@ -13,8 +13,8 @@ android {
         applicationId = "de.haberland.meihome"
         minSdk = 26
         targetSdk = 37
-        versionCode = 12
-        versionName = "0.6.1"
+        versionCode = 13
+        versionName = "0.6.2"
     }
 
     compileOptions {
