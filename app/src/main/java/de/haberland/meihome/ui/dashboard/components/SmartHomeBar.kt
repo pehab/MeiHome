@@ -27,6 +27,7 @@ fun SmartHomeBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 12.dp),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             OutlinedButton(onClick = onOpenFrontDoor) {
