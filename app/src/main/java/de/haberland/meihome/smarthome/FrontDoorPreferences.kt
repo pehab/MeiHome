@@ -29,6 +29,8 @@ class FrontDoorPreferences(context: Context) {
     fun setNestClientSecret(value: String) = secrets.put(SecureSecretStore.NEST_CLIENT_SECRET, value)
     fun getNestRefreshToken(): String = secrets.get(SecureSecretStore.NEST_REFRESH_TOKEN)
     fun setNestRefreshToken(value: String) = secrets.put(SecureSecretStore.NEST_REFRESH_TOKEN, value)
+    fun getPubSubRefreshToken(): String = secrets.get(SecureSecretStore.PUBSUB_REFRESH_TOKEN)
+    fun setPubSubRefreshToken(value: String) = secrets.put(SecureSecretStore.PUBSUB_REFRESH_TOKEN, value)
 
     companion object {
         private const val KEY_GOOGLE_PROJECT_ID = "google_project_id"
