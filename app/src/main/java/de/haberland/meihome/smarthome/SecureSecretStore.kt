@@ -74,5 +74,6 @@ class SecureSecretStore(context: Context) {
 
         const val NEST_CLIENT_SECRET = "nest_client_secret"
         const val NEST_REFRESH_TOKEN = "nest_refresh_token"
+        const val PUBSUB_REFRESH_TOKEN = "pubsub_refresh_token"
     }
 }
