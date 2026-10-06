@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MeiHome Google Home</title>
+</head>
+<body>
+  <p>Google Home wird mit MeiHome verbunden…</p>
+  <script>
+    const query = window.location.search || "";
+    window.location.replace("meihome://nest-auth" + query);
+  </script>
+</body>
+</html>
