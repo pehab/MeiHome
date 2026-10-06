@@ -17,9 +17,7 @@ data class FrontDoorConfig(
     val nukiAccessToken: String = "",
 ) {
     val googleConfigured: Boolean
-        get() = googleProjectId.isNotBlank() &&
-            googleDeviceId.isNotBlank() &&
-            googleAccessToken.isNotBlank()
+        get() = googleProjectId.isNotBlank() && googleDeviceId.isNotBlank()
 
     val nukiConfigured: Boolean
         get() = nukiDeviceId.isNotBlank() && nukiAccessToken.isNotBlank()
