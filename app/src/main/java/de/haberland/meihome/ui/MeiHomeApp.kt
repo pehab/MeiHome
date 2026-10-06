@@ -120,39 +120,42 @@ fun MeiHomeApp(
 
     LaunchedEffect(nestOAuthCallback) {
         val callback = nestOAuthCallback ?: return@LaunchedEffect
-        onNestOAuthCallbackConsumed()
 
-        val error = callback.getQueryParameter("error")
-        if (!error.isNullOrBlank()) {
-            nestSetupMessage = "Google-Verbindung abgebrochen: $error"
-            return@LaunchedEffect
-        }
+        try {
+            val error = callback.getQueryParameter("error")
+            if (!error.isNullOrBlank()) {
+                nestSetupMessage = "Google-Verbindung abgebrochen: $error"
+                return@LaunchedEffect
+            }
 
-        val code = callback.getQueryParameter("code")
-        if (code.isNullOrBlank()) {
-            nestSetupMessage = "Google hat keinen Autorisierungscode geliefert."
-            return@LaunchedEffect
-        }
+            val code = callback.getQueryParameter("code")
+            if (code.isNullOrBlank()) {
+                nestSetupMessage = "Google hat keinen Autorisierungscode geliefert."
+                return@LaunchedEffect
+            }
 
-        runCatching {
-            val tokenResponse = nestOAuthManager.exchangeAuthorizationCode(code)
-            nestTokenManager.acceptInitial(tokenResponse)
+            runCatching {
+                val tokenResponse = nestOAuthManager.exchangeAuthorizationCode(code)
+                nestTokenManager.acceptInitial(tokenResponse)
 
-            val discovered = GoogleSdmDoorbellClient(
-                configProvider = { frontDoorConfig.copy(googleDeviceId = "") },
-                accessTokenProvider = nestTokenManager::accessToken,
-            ).listDoorbells().firstOrNull { it.supportsWebRtc }
-                ?: error("Keine WebRTC-fähige Google Doorbell gefunden.")
+                val discovered = GoogleSdmDoorbellClient(
+                    configProvider = { frontDoorConfig.copy(googleDeviceId = "") },
+                    accessTokenProvider = nestTokenManager::accessToken,
+                ).listDoorbells().firstOrNull { it.supportsWebRtc }
+                    ?: error("Keine WebRTC-fähige Google Doorbell gefunden.")
 
-            val updated = frontDoorConfig.copy(
-                googleProjectId = GOOGLE_DEVICE_ACCESS_PROJECT_ID,
-                googleDeviceId = discovered.id,
-            )
-            frontDoorPreferences.save(updated)
-            frontDoorConfig = updated
-            nestSetupMessage = "Google Doorbell verbunden."
-        }.onFailure {
-            nestSetupMessage = it.message ?: "Google Home konnte nicht verbunden werden."
+                val updated = frontDoorConfig.copy(
+                    googleProjectId = GOOGLE_DEVICE_ACCESS_PROJECT_ID,
+                    googleDeviceId = discovered.id,
+                )
+                frontDoorPreferences.save(updated)
+                frontDoorConfig = updated
+                nestSetupMessage = "Google Doorbell verbunden."
+            }.onFailure {
+                nestSetupMessage = it.message ?: "Google Home konnte nicht verbunden werden."
+            }
+        } finally {
+            onNestOAuthCallbackConsumed()
         }
     }
 
