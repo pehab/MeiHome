@@ -1,23 +1,47 @@
 # MeiHome
 
-Familien-Dashboard für ein Android-Wandtablet mit MeiLists-Listen und Kalender.
-Aktueller Stand: **0.5.0**, `versionCode 8`; Paket `de.haberland.meihome`.
+Familien-Dashboard für ein Android-Wandtablet mit MeiLists, Kalender und Haustürsteuerung.
+Aktueller Stand: **0.6.9**, `versionCode 20`; Paket `de.haberland.meihome`.
 
-## Verfügbare Funktionen
+## Funktionen
 
 - Google-Anmeldung über Credential Manager und Firebase Authentication.
-- Auswahl je einer Einkaufs- und Aufgabenliste aus den zugänglichen Firebase-Kategorien von MeiLists.
+- Auswahl einer Einkaufs- und Aufgabenliste aus den zugänglichen Firebase-Kategorien von MeiLists.
 - Live-Anzeige, Hinzufügen und Abhaken von Listeneinträgen.
-- Einkaufsprodukte aus dem Katalog der ausgewählten Listenkategorie wählen: Suche, Produktauswahl und Übernahme des Standardbereichs.
-- Freie Einkaufseingabe nur, wenn der erfolgreich geladene Produktkatalog leer ist. Todos bleiben frei eingebbar.
-- Erhaltene Listenauswahl auch bei zeitversetzt eintreffenden Kategorie-Daten.
-- Lokale Speicherung der ausgewählten Listen.
-- Kalenderanzeige für heute und die folgenden zwei Tage über den Android-Kalenderanbieter, inklusive ganztägiger Termine.
+- Kataloggestützte Einkaufseingabe inklusive Standardbereich.
+- Kalenderanzeige für heute und die folgenden zwei Tage über den lokalen Android-Kalenderanbieter.
 - Google-Play-In-App-Updates und Firebase Crashlytics.
+- **Google Nest Doorbell**: WebRTC-Livestream im Haustürdialog.
+- **Klingelereignisse** über Google Smart Device Management / Cloud Pub/Sub; ein Klingeln kann den Haustürdialog automatisch öffnen.
+- Wählbarer Android-Klingelton für Klingelereignisse mit Begrenzung und Event-Deduplizierung.
+- **Nuki Web API**: Schlossstatus, Aufsperren, Zusperren, Falle ziehen und Lock ’n’ Go.
+- Einstellbarer **Nachtmodus**: Klingelereignisse bleiben lautlos, das Display wird abgedunkelt und darf in den Android-Standby wechseln.
+- OAuth-Client-Secret, Refresh-Tokens und Nuki-API-Token werden lokal über den Android Keystore verschlüsselt gespeichert.
 
-Der Kalender benötigt `READ_CALENDAR` und auf dem Tablet synchronisierte Kalender. Es gibt keine direkte Google-Calendar-API-Anbindung. Lokale MeiLists-Kategorien werden nicht synchronisiert.
+MeiHome ist für ein dauerhaft betriebenes Wandtablet gedacht. Die Klingelereignisse werden vom laufenden App-Prozess verarbeitet; die aktuelle Implementierung ist kein Push-Dienst, der eine vollständig beendete App im Hintergrund neu startet.
 
-**Noch Platzhalter:** Die Schaltflächen „Haustür“ und „Klingel“ haben noch keine Aktion. Nuki, Klingelstream und weitere Smart-Home-Geräte sind nicht integriert.
+## Berechtigungen
+
+- `INTERNET` für Firebase, Google Device Access/Pub/Sub, Nuki und Play-Dienste.
+- `READ_CALENDAR` für die lokale Kalenderanzeige.
+
+Kalenderdaten werden über den Android-Kalenderanbieter gelesen; MeiHome besitzt keine direkte Google-Calendar-API-Anbindung.
+
+## Firebase / MeiLists
+
+`app/google-services.json` muss die App `de.haberland.meihome` im Firebase-Projekt mit den gewünschten MeiLists-Daten enthalten. Google-Anmeldung muss aktiviert sein und die Fingerprints der tatsächlich verwendeten Signaturzertifikate müssen registriert werden.
+
+MeiHome nutzt die Firestore-Collections von MeiLists für zugängliche Kategorien, Listen, Einträge und Katalogprodukte. Lokale MeiLists-Kategorien stehen in MeiHome nicht zur Verfügung.
+
+## Google Nest Doorbell
+
+Die Integration verwendet Googles Smart Device Management API und WebRTC. Für Klingelereignisse wird zusätzlich Google Cloud Pub/Sub verwendet. OAuth läuft über den konfigurierten Device-Access-/Google-Cloud-Client; Refresh-Tokens werden verschlüsselt auf dem Tablet gespeichert.
+
+Die OAuth-Callback-Seite liegt unter `docs/oauth-callback.html` und leitet den Autorisierungscode per `meihome://nest-auth` zurück an die App. Geheimnisse und Tokens gehören nicht ins Repository.
+
+## Nuki
+
+Für den privaten Betrieb wird ein persönlicher Nuki Web API Token verwendet. MeiHome benötigt nur Zugriff zum Anzeigen des Smart Locks und zum Ausführen von Schlossaktionen. Der Token wird verschlüsselt im Android Keystore gespeichert und darf nicht ins Repository eingecheckt werden.
 
 ## Entwicklung und Build
 
@@ -26,40 +50,17 @@ Voraussetzungen: JDK 17, Android SDK 37 und Android 8 (API 26) oder neuer.
 ```bash
 git clone https://github.com/pehab/MeiHome.git
 cd MeiHome
-bash gradlew :app:assembleDebug
+bash gradlew :app:testDebugUnitTest :app:assembleDebug
 bash gradlew :app:lintDebug
 ```
 
-Alternativ in Android Studio öffnen und Gradle synchronisieren. Den SDK-Pfad bei Bedarf in der nicht versionierten `local.properties` als `sdk.dir` setzen.
+GitHub Actions führt Tests und Builds für Änderungen auf `main` aus. Funktionen mit echten Firebase-, Nest-, Pub/Sub- oder Nuki-Konten benötigen zusätzlich einen Integrationstest auf dem vorgesehenen Tablet.
 
-## Firebase einrichten
+## Sicherheit
 
-`app/google-services.json` muss die App `de.haberland.meihome` im selben Firebase-Projekt wie die gewünschten MeiLists-Daten enthalten. Google-Anmeldung aktivieren und die SHA-1-/SHA-256-Fingerprints der verwendeten Signaturzertifikate registrieren. Lokaler Debug-Build und Google-Play-Build können unterschiedliche Zertifikate verwenden. Anschließend die aktualisierte Firebase-Konfiguration herunterladen.
+OAuth-Client-Secret, Google-Refresh-Tokens und der Nuki-API-Token werden nicht im normalen Preferences-Speicher abgelegt, sondern über Android Keystore/AES-GCM geschützt. Kurzlebige Access-Tokens werden nur zur Laufzeit verwendet.
 
-Die App nutzt die Collections `categories`, `shopping_lists`, `list_items` und `catalog_products`; zugängliche Kategorien werden über `allowedUsers` bestimmt. Firestore-Regeln müssen diese Berechtigungen serverseitig durchsetzen. Deploybare Regeln sind nicht Bestandteil dieses Repositories.
-
-## Einkauf aus dem Katalog
-
-Beim Hinzufügen lädt MeiHome den Produktkatalog aus `catalog_products`, gefiltert nach der `categoryId` der Einkaufsliste. Bei vorhandenem Katalog muss ein Produkt ausgewählt werden; bloßes Tippen eines Namens reicht nicht. Der Produktname und `defaultArea` werden als `text` und `area` am Listeneintrag gespeichert. Katalogpflege erfolgt weiterhin in MeiLists.
-
-Zum Prüfen des Katalogs wird eine Serververbindung benötigt: Ein leerer Offline-Cache gilt nicht als leerer Katalog. Bei Ladefehlern bleibt die Eingabe gesperrt und kann erneut versucht werden. Speicherfehler werden im geöffneten Dialog angezeigt; wiederholtes Tippen während des Speicherns erzeugt keine zusätzlichen Schreibaufträge.
-
-## Architektur und Qualität
-
-- `data/auth/`: Google-/Firebase-Anmeldung und Auth-Zustand.
-- `data/lists/`: Firestore-Listener und Listenoperationen.
-- `data/calendar/`: Android-Kalenderzugriff.
-- `data/preferences/`: lokal gespeicherte Dashboard-Auswahl.
-- `domain/model/`: Listenmodelle.
-- `ui/dashboard/`: ViewModel, Zustand und Darstellung.
-
-GitHub Actions baut die Debug-APK und führt `testDebugUnitTest` sowie `lintDebug` aus. Die JVM-Tests prüfen Katalogpflicht, freien Eintrag bei leerem Katalog, Kategoriezuordnung, Bereichsübernahme, Lade-/Speicherfehler, doppelte Klicks, Abbruch sowie die Wiederherstellung der Listenauswahl bei zeitversetzten Daten. Firebase-Regeln und die Bedienung auf dem Wandtablet benötigen zusätzlich einen Integrationstest.
-
-```bash
-bash gradlew :app:testDebugUnitTest :app:assembleDebug
-```
-
-Firestore-Listenerfehler werden angezeigt, Coroutine-Abbrüche nicht als fachliche Fehler behandelt. Der Einkaufsdialog hat ein eigenes ViewModel mit injizierbarem Repository. Nächste technische Schritte: Kalenderabfragen vom Hauptthread lösen und den Tageswechsel ohne Kalenderänderung berücksichtigen; weitere Dashboard-Abhängigkeiten für Tests injizierbar machen.
+Das schützt die Zugangsdaten auf dem Gerät, ersetzt aber keine serverseitige OAuth-Architektur. Die lokale OAuth-Lösung ist bewusst für dieses persönliche Wandtablet ausgelegt.
 
 ## Datenschutz
 
