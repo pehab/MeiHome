@@ -43,6 +43,7 @@ fun DashboardScreen(
     onAddShoppingItem: () -> Unit,
     onAddTodoItem: () -> Unit,
     onRequestCalendarPermission: () -> Unit,
+    onOpenFrontDoor: () -> Unit,
     onOpenSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -95,7 +96,7 @@ fun DashboardScreen(
             )
         }
 
-        SmartHomeBar()
+        SmartHomeBar(onOpenFrontDoor = onOpenFrontDoor)
     }
 }
 
