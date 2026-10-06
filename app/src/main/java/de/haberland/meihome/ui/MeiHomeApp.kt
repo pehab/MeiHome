@@ -50,6 +50,7 @@ import de.haberland.meihome.smarthome.GOOGLE_DEVICE_ACCESS_PROJECT_ID
 import de.haberland.meihome.smarthome.GoogleSdmDoorbellClient
 import de.haberland.meihome.smarthome.NestOAuthManager
 import de.haberland.meihome.smarthome.NestTokenManager
+import de.haberland.meihome.smarthome.NukiWebClient
 import de.haberland.meihome.smarthome.PubSubOAuthManager
 import de.haberland.meihome.smarthome.PubSubTokenManager
 import de.haberland.meihome.ui.dashboard.DashboardScreen
@@ -85,12 +86,19 @@ fun MeiHomeApp(
     }
     var frontDoorConfig by remember { mutableStateOf(frontDoorPreferences.load()) }
     var streamStatus by remember { mutableStateOf<DoorbellStreamStatus>(DoorbellStreamStatus.Idle) }
+    var nukiLockState by remember { mutableStateOf(de.haberland.meihome.smarthome.DoorLockState(false, "Nicht verbunden")) }
     var nestSetupMessage by remember { mutableStateOf<String?>(null) }
     val frontDoorScope = rememberCoroutineScope()
     val doorbellClient = remember(frontDoorConfig.googleDeviceId, nestTokenManager) {
         GoogleSdmDoorbellClient(
             configProvider = { frontDoorConfig },
             accessTokenProvider = nestTokenManager::accessToken,
+        )
+    }
+    val nukiClient = remember(frontDoorConfig.nukiDeviceId, frontDoorPreferences) {
+        NukiWebClient(
+            tokenProvider = frontDoorPreferences::getNukiApiToken,
+            deviceIdProvider = { frontDoorConfig.nukiDeviceId },
         )
     }
     val webRtcController = remember(doorbellClient) {
@@ -211,6 +219,25 @@ fun MeiHomeApp(
         }
     }
 
+    LaunchedEffect(frontDoorOpen, frontDoorConfig.nukiConfigured, nukiClient) {
+        if (!frontDoorOpen || !frontDoorConfig.nukiConfigured) {
+            nukiLockState = de.haberland.meihome.smarthome.DoorLockState(false, "Nicht verbunden")
+            return@LaunchedEffect
+        }
+
+        while (true) {
+            runCatching { nukiClient.getState() }
+                .onSuccess { nukiLockState = it }
+                .onFailure {
+                    nukiLockState = de.haberland.meihome.smarthome.DoorLockState(
+                        false,
+                        it.message ?: "Nuki nicht erreichbar",
+                    )
+                }
+            delay(5_000L)
+        }
+    }
+
     DisposableEffect(webRtcController) {
         onDispose { webRtcController.release() }
     }
@@ -241,6 +268,36 @@ fun MeiHomeApp(
                 cameraConfigured = frontDoorConfig.googleConfigured,
                 streamStatus = streamStatus,
                 webRtcController = webRtcController,
+                nukiConnected = nukiLockState.connected,
+                lockStatus = nukiLockState.label,
+                onUnlock = {
+                    frontDoorScope.launch {
+                        runCatching { nukiClient.execute(de.haberland.meihome.smarthome.DoorAction.UNLOCK) }
+                        delay(1_000L)
+                        runCatching { nukiClient.getState() }.onSuccess { nukiLockState = it }
+                    }
+                },
+                onLock = {
+                    frontDoorScope.launch {
+                        runCatching { nukiClient.execute(de.haberland.meihome.smarthome.DoorAction.LOCK) }
+                        delay(1_000L)
+                        runCatching { nukiClient.getState() }.onSuccess { nukiLockState = it }
+                    }
+                },
+                onUnlatch = {
+                    frontDoorScope.launch {
+                        runCatching { nukiClient.execute(de.haberland.meihome.smarthome.DoorAction.UNLATCH) }
+                        delay(1_000L)
+                        runCatching { nukiClient.getState() }.onSuccess { nukiLockState = it }
+                    }
+                },
+                onLockAndGo = {
+                    frontDoorScope.launch {
+                        runCatching { nukiClient.execute(de.haberland.meihome.smarthome.DoorAction.LOCK_N_GO) }
+                        delay(1_000L)
+                        runCatching { nukiClient.getState() }.onSuccess { nukiLockState = it }
+                    }
+                },
                 onDismiss = { frontDoorOpen = false },
             )
         }
@@ -251,6 +308,7 @@ fun MeiHomeApp(
                 clientSecretConfigured = frontDoorPreferences.getNestClientSecret().isNotBlank(),
                 googleLinked = nestOAuthManager.isLinked(),
                 pubSubLinked = pubSubOAuthManager.isLinked(),
+                nukiTokenConfigured = frontDoorPreferences.getNukiApiToken().isNotBlank(),
                 onConnectGoogle = { enteredSecret ->
                     if (enteredSecret.isNotBlank()) {
                         frontDoorPreferences.setNestClientSecret(enteredSecret)
@@ -277,6 +335,19 @@ fun MeiHomeApp(
                         val doorbells = discoveryClient.listDoorbells().filter { it.supportsWebRtc }
                         require(doorbells.isNotEmpty()) { "Keine WebRTC-fähige Google Doorbell gefunden." }
                         discoveryConfig.copy(googleDeviceId = doorbells.first().id)
+                    }
+                },
+                onDiscoverNuki = { enteredToken ->
+                    runCatching {
+                        if (enteredToken.isNotBlank()) {
+                            frontDoorPreferences.setNukiApiToken(enteredToken)
+                        }
+                        require(frontDoorPreferences.getNukiApiToken().isNotBlank()) {
+                            "Nuki API Token fehlt."
+                        }
+                        val locks = nukiClient.listLocks()
+                        require(locks.isNotEmpty()) { "Kein Nuki Smart Lock gefunden." }
+                        frontDoorConfig.copy(nukiDeviceId = locks.first().id)
                     }
                 },
                 onSave = { config ->
