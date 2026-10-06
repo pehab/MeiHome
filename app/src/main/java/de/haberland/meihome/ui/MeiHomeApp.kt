@@ -4,7 +4,9 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -44,7 +46,9 @@ import de.haberland.meihome.smarthome.DoorbellStreamStatus
 import de.haberland.meihome.smarthome.DoorbellWebRtcController
 import de.haberland.meihome.smarthome.FrontDoorPreferences
 import de.haberland.meihome.smarthome.GOOGLE_DEVICE_ACCESS_PROJECT_ID
-import de.haberland.meihome.smarthome.FirebaseDoorbellClient
+import de.haberland.meihome.smarthome.GoogleSdmDoorbellClient
+import de.haberland.meihome.smarthome.NestOAuthManager
+import de.haberland.meihome.smarthome.NestTokenManager
 import de.haberland.meihome.ui.dashboard.DashboardScreen
 import de.haberland.meihome.ui.dashboard.DashboardViewModel
 import de.haberland.meihome.ui.dashboard.components.FrontDoorConfigDialog
@@ -60,17 +64,25 @@ private enum class ListRole {
 fun MeiHomeApp(
     updateReadyToInstall: Boolean = false,
     onInstallUpdate: () -> Unit = {},
+    nestOAuthCallback: Uri? = null,
+    onNestOAuthCallbackConsumed: () -> Unit = {},
     viewModel: DashboardViewModel = viewModel(),
 ) {
     val context = LocalContext.current
     val activity = context.findActivity()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val frontDoorPreferences = remember(context) { FrontDoorPreferences(context) }
+    val nestOAuthManager = remember(frontDoorPreferences) { NestOAuthManager(frontDoorPreferences) }
+    val nestTokenManager = remember(nestOAuthManager) { NestTokenManager(nestOAuthManager) }
     var frontDoorConfig by remember { mutableStateOf(frontDoorPreferences.load()) }
     var streamStatus by remember { mutableStateOf<DoorbellStreamStatus>(DoorbellStreamStatus.Idle) }
+    var nestSetupMessage by remember { mutableStateOf<String?>(null) }
     val frontDoorScope = rememberCoroutineScope()
-    val doorbellClient = remember(frontDoorConfig.googleDeviceId) {
-        FirebaseDoorbellClient { frontDoorConfig }
+    val doorbellClient = remember(frontDoorConfig.googleDeviceId, nestTokenManager) {
+        GoogleSdmDoorbellClient(
+            configProvider = { frontDoorConfig },
+            accessTokenProvider = nestTokenManager::accessToken,
+        )
     }
     val webRtcController = remember(doorbellClient) {
         DoorbellWebRtcController(
@@ -104,6 +116,44 @@ fun MeiHomeApp(
 
     LaunchedEffect(updateReadyToInstall) {
         if (!updateReadyToInstall) updatePromptDismissed = false
+    }
+
+    LaunchedEffect(nestOAuthCallback) {
+        val callback = nestOAuthCallback ?: return@LaunchedEffect
+        onNestOAuthCallbackConsumed()
+
+        val error = callback.getQueryParameter("error")
+        if (!error.isNullOrBlank()) {
+            nestSetupMessage = "Google-Verbindung abgebrochen: $error"
+            return@LaunchedEffect
+        }
+
+        val code = callback.getQueryParameter("code")
+        if (code.isNullOrBlank()) {
+            nestSetupMessage = "Google hat keinen Autorisierungscode geliefert."
+            return@LaunchedEffect
+        }
+
+        runCatching {
+            val tokenResponse = nestOAuthManager.exchangeAuthorizationCode(code)
+            nestTokenManager.acceptInitial(tokenResponse)
+
+            val discovered = GoogleSdmDoorbellClient(
+                configProvider = { frontDoorConfig.copy(googleDeviceId = "") },
+                accessTokenProvider = nestTokenManager::accessToken,
+            ).listDoorbells().firstOrNull { it.supportsWebRtc }
+                ?: error("Keine WebRTC-fähige Google Doorbell gefunden.")
+
+            val updated = frontDoorConfig.copy(
+                googleProjectId = GOOGLE_DEVICE_ACCESS_PROJECT_ID,
+                googleDeviceId = discovered.id,
+            )
+            frontDoorPreferences.save(updated)
+            frontDoorConfig = updated
+            nestSetupMessage = "Google Doorbell verbunden."
+        }.onFailure {
+            nestSetupMessage = it.message ?: "Google Home konnte nicht verbunden werden."
+        }
     }
 
     LaunchedEffect(frontDoorOpen, frontDoorConfig.googleConfigured, webRtcController) {
@@ -151,14 +201,26 @@ fun MeiHomeApp(
         if (frontDoorSettingsOpen) {
             FrontDoorConfigDialog(
                 initial = frontDoorConfig,
+                clientSecretConfigured = frontDoorPreferences.getNestClientSecret().isNotBlank(),
+                googleLinked = nestOAuthManager.isLinked(),
+                onConnectGoogle = { enteredSecret ->
+                    if (enteredSecret.isNotBlank()) {
+                        frontDoorPreferences.setNestClientSecret(enteredSecret)
+                    }
+                    activity?.startActivity(
+                        Intent(Intent.ACTION_VIEW, nestOAuthManager.authorizationUri()),
+                    )
+                },
                 onDiscoverDoorbell = {
                     runCatching {
                         val discoveryConfig = frontDoorConfig.copy(
                             googleProjectId = GOOGLE_DEVICE_ACCESS_PROJECT_ID,
                             googleDeviceId = "",
-                            googleAccessToken = "",
                         )
-                        val discoveryClient = FirebaseDoorbellClient { discoveryConfig }
+                        val discoveryClient = GoogleSdmDoorbellClient(
+                            configProvider = { discoveryConfig },
+                            accessTokenProvider = nestTokenManager::accessToken,
+                        )
                         val doorbells = discoveryClient.listDoorbells().filter { it.supportsWebRtc }
                         require(doorbells.isNotEmpty()) { "Keine WebRTC-fähige Google Doorbell gefunden." }
                         discoveryConfig.copy(googleDeviceId = doorbells.first().id)
@@ -223,6 +285,19 @@ fun MeiHomeApp(
                     onDismiss = { addRole = null },
                 )
             }
+        }
+
+        nestSetupMessage?.let { message ->
+            AlertDialog(
+                onDismissRequest = { nestSetupMessage = null },
+                title = { Text("Google Home") },
+                text = { Text(message) },
+                confirmButton = {
+                    TextButton(onClick = { nestSetupMessage = null }) {
+                        Text("OK")
+                    }
+                },
+            )
         }
 
         state.errorMessage?.let { message ->
