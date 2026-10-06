@@ -13,8 +13,8 @@ android {
         applicationId = "de.haberland.meihome"
         minSdk = 26
         targetSdk = 37
-        versionCode = 11
-        versionName = "0.6.0"
+        versionCode = 12
+        versionName = "0.6.1"
     }
 
     compileOptions {
@@ -51,6 +51,7 @@ dependencies {
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
     implementation(libs.kotlinx.coroutines.play.services)
+    implementation("io.github.webrtc-sdk:android:150.7871.01")
 
     // Google Sign-In via Credential Manager.
     implementation(libs.androidx.credentials)
