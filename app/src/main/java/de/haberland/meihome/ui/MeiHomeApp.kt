@@ -43,6 +43,7 @@ import de.haberland.meihome.domain.model.MeiList
 import de.haberland.meihome.smarthome.DoorbellStreamStatus
 import de.haberland.meihome.smarthome.DoorbellWebRtcController
 import de.haberland.meihome.smarthome.FrontDoorPreferences
+import de.haberland.meihome.smarthome.GOOGLE_DEVICE_ACCESS_PROJECT_ID
 import de.haberland.meihome.smarthome.GoogleSdmDoorbellClient
 import de.haberland.meihome.ui.dashboard.DashboardScreen
 import de.haberland.meihome.ui.dashboard.DashboardViewModel
@@ -154,6 +155,24 @@ fun MeiHomeApp(
         if (frontDoorSettingsOpen) {
             FrontDoorConfigDialog(
                 initial = frontDoorConfig,
+                onDiscoverDoorbell = { accessToken ->
+                    runCatching {
+                        val discoveryConfig = frontDoorConfig.copy(
+                            googleProjectId = GOOGLE_DEVICE_ACCESS_PROJECT_ID,
+                            googleDeviceId = "",
+                            googleAccessToken = accessToken,
+                        )
+                        val discoveryClient = GoogleSdmDoorbellClient { discoveryConfig }
+                        val doorbells = discoveryClient.listDoorbells()
+                            .filter { it.supportsWebRtc }
+                        require(doorbells.isNotEmpty()) {
+                            "Keine WebRTC-fähige Google Doorbell gefunden."
+                        }
+                        discoveryConfig.copy(
+                            googleDeviceId = doorbells.first().id,
+                        )
+                    }
+                },
                 onSave = { config ->
                     frontDoorPreferences.save(config)
                     frontDoorConfig = config
