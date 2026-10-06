@@ -24,7 +24,9 @@ fun FrontDoorConfigDialog(
     initial: FrontDoorConfig,
     clientSecretConfigured: Boolean,
     googleLinked: Boolean,
+    pubSubLinked: Boolean,
     onConnectGoogle: (String) -> Unit,
+    onConnectPubSub: () -> Unit,
     onDiscoverDoorbell: suspend () -> Result<FrontDoorConfig>,
     onSave: (FrontDoorConfig) -> Unit,
     onDismiss: () -> Unit,
@@ -84,6 +86,16 @@ fun FrontDoorConfigDialog(
                 }
 
                 OutlinedButton(
+                    onClick = onConnectPubSub,
+                    enabled = googleLinked && !pubSubLinked,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                ) {
+                    Text(if (pubSubLinked) "Klingelereignisse verbunden" else "Klingelereignisse verbinden")
+                }
+
+                OutlinedButton(
                     onClick = {
                         discovering = true
                         statusText = "Suche Doorbell..."
@@ -111,6 +123,12 @@ fun FrontDoorConfigDialog(
                 }
 
                 Text(statusText, modifier = Modifier.padding(top = 10.dp))
+                if (pubSubLinked) {
+                    Text(
+                        "Klingelereignisse sind aktiv. Beim Klingeln öffnet MeiHome automatisch die Haustür.",
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             }
         },
         confirmButton = {
