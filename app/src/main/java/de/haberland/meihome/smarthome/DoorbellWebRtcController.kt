@@ -9,6 +9,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.webrtc.AudioTrack
 import org.webrtc.DefaultVideoDecoderFactory
+import org.webrtc.DataChannel
 import org.webrtc.DefaultVideoEncoderFactory
 import org.webrtc.EglBase
 import org.webrtc.IceCandidate
@@ -103,14 +104,17 @@ class DoorbellWebRtcController(
         }
         peerConnection = peer
 
-        peer.addTransceiver(
-            org.webrtc.MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO,
-            RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY),
-        )
+        // Google SDM requires m-lines in exactly this order:
+        // audio, video, application.
         peer.addTransceiver(
             org.webrtc.MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO,
             RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY),
         )
+        peer.addTransceiver(
+            org.webrtc.MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO,
+            RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY),
+        )
+        peer.createDataChannel("sdm", DataChannel.Init())
 
         val offer = createOffer(peer)
         setLocalDescription(peer, offer)
