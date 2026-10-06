@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.Ringtone
 import android.media.RingtoneManager
 import android.net.Uri
 import android.view.WindowManager
@@ -100,6 +101,8 @@ fun MeiHomeApp(
     var frontDoorConfig by remember { mutableStateOf(frontDoorPreferences.load()) }
     var streamStatus by remember { mutableStateOf<DoorbellStreamStatus>(DoorbellStreamStatus.Idle) }
     var nukiLockState by remember { mutableStateOf(de.haberland.meihome.smarthome.DoorLockState(false, "Nicht verbunden")) }
+    var activeDoorbellRingtone by remember { mutableStateOf<Ringtone?>(null) }
+    var lastDoorbellChimeAt by remember { mutableStateOf(0L) }
     var nestSetupMessage by remember { mutableStateOf<String?>(null) }
     val frontDoorScope = rememberCoroutineScope()
     val doorbellClient = remember(frontDoorConfig.googleDeviceId, nestTokenManager) {
@@ -262,9 +265,27 @@ fun MeiHomeApp(
                 doorbellEventClient.pullChime(frontDoorConfig.googleDeviceId)
             }.onSuccess { chime ->
                 if (chime) {
-                    if (!nightModeActive) {
-                        playDoorbellRingtone(context, displaySettings.doorbellRingtoneUri)
-                        frontDoorOpen = true
+                    val now = System.currentTimeMillis()
+                    val isNewPress = now - lastDoorbellChimeAt >= DOORBELL_CHIME_COOLDOWN_MS
+                    if (isNewPress) {
+                        lastDoorbellChimeAt = now
+                        if (!nightModeActive) {
+                            activeDoorbellRingtone?.stop()
+                            val ringtone = createDoorbellRingtone(
+                                context,
+                                displaySettings.doorbellRingtoneUri,
+                            )
+                            activeDoorbellRingtone = ringtone
+                            ringtone?.play()
+                            frontDoorScope.launch {
+                                delay(DOORBELL_RING_DURATION_MS)
+                                if (activeDoorbellRingtone === ringtone) {
+                                    ringtone?.stop()
+                                    activeDoorbellRingtone = null
+                                }
+                            }
+                            frontDoorOpen = true
+                        }
                     }
                 }
             }
@@ -300,7 +321,11 @@ fun MeiHomeApp(
     }
 
     DisposableEffect(webRtcController) {
-        onDispose { webRtcController.release() }
+        onDispose {
+            activeDoorbellRingtone?.stop()
+            activeDoorbellRingtone = null
+            webRtcController.release()
+        }
     }
 
     MaterialTheme(colorScheme = darkColorScheme()) {
@@ -359,7 +384,11 @@ fun MeiHomeApp(
                         runCatching { nukiClient.getState() }.onSuccess { nukiLockState = it }
                     }
                 },
-                onDismiss = { frontDoorOpen = false },
+                onDismiss = {
+                    activeDoorbellRingtone?.stop()
+                    activeDoorbellRingtone = null
+                    frontDoorOpen = false
+                },
             )
         }
 
@@ -803,18 +832,21 @@ private fun doorbellRingtoneName(
     }.getOrNull().orEmpty().ifBlank { "Standard" }
 }
 
-private fun playDoorbellRingtone(
+private fun createDoorbellRingtone(
     context: Context,
     uriValue: String,
-) {
+): Ringtone? {
     val uri = uriValue
         .takeIf { it.isNotBlank() }
         ?.let(Uri::parse)
         ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-    runCatching {
-        RingtoneManager.getRingtone(context, uri)?.play()
-    }
+    return runCatching {
+        RingtoneManager.getRingtone(context, uri)
+    }.getOrNull()
 }
+
+private const val DOORBELL_RING_DURATION_MS = 5_000L
+private const val DOORBELL_CHIME_COOLDOWN_MS = 15_000L
 
 private tailrec fun Context.findActivity(): Activity? =
     when (this) {
