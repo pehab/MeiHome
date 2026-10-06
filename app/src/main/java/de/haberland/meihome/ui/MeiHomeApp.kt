@@ -6,7 +6,9 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.RingtoneManager
 import android.net.Uri
+import android.view.WindowManager
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -23,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
@@ -39,9 +42,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.haberland.meihome.domain.model.MeiList
+import de.haberland.meihome.settings.MeiHomeDisplaySettings
+import de.haberland.meihome.settings.MeiHomeSettingsPreferences
+import de.haberland.meihome.settings.isNightModeNow
 import de.haberland.meihome.smarthome.DoorbellEventClient
 import de.haberland.meihome.smarthome.DoorbellStreamStatus
 import de.haberland.meihome.smarthome.DoorbellWebRtcController
@@ -60,6 +67,7 @@ import de.haberland.meihome.ui.dashboard.components.FrontDoorDialog
 import de.haberland.meihome.ui.shopping.ShoppingItemDialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.LocalTime
 
 private enum class ListRole {
     SHOPPING,
@@ -78,6 +86,10 @@ fun MeiHomeApp(
     val activity = context.findActivity()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val frontDoorPreferences = remember(context) { FrontDoorPreferences(context) }
+    val displaySettingsPreferences = remember(context) { MeiHomeSettingsPreferences(context) }
+    var displaySettings by remember { mutableStateOf(displaySettingsPreferences.load()) }
+    var currentTime by remember { mutableStateOf(LocalTime.now()) }
+    val nightModeActive = displaySettings.isNightModeNow(currentTime.hour, currentTime.minute)
     val nestOAuthManager = remember(frontDoorPreferences) { NestOAuthManager(frontDoorPreferences) }
     val nestTokenManager = remember(nestOAuthManager) { NestTokenManager(nestOAuthManager) }
     val pubSubOAuthManager = remember(frontDoorPreferences) { PubSubOAuthManager(frontDoorPreferences) }
@@ -122,6 +134,26 @@ fun MeiHomeApp(
     ) { granted ->
         viewModel.setCalendarPermission(granted)
     }
+    val ringtonePickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val data = result.data
+            val uri = data?.let {
+                IntentCompat.getParcelableExtra(
+                    it,
+                    RingtoneManager.EXTRA_RINGTONE_PICKED_URI,
+                    Uri::class.java,
+                )
+            }
+            if (uri != null) {
+                displaySettings = displaySettings.copy(
+                    doorbellRingtoneUri = uri.toString(),
+                )
+                displaySettingsPreferences.save(displaySettings)
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.setCalendarPermission(
@@ -130,6 +162,29 @@ fun MeiHomeApp(
                 Manifest.permission.READ_CALENDAR,
             ) == PackageManager.PERMISSION_GRANTED,
         )
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentTime = LocalTime.now()
+            delay(30_000L)
+        }
+    }
+
+    LaunchedEffect(nightModeActive, activity) {
+        activity?.window?.let { window ->
+            if (nightModeActive) {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                val params = window.attributes
+                params.screenBrightness = 0.01f
+                window.attributes = params
+            } else {
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                val params = window.attributes
+                params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                window.attributes = params
+            }
+        }
     }
 
     LaunchedEffect(updateReadyToInstall) {
@@ -193,6 +248,8 @@ fun MeiHomeApp(
         frontDoorConfig.googleDeviceId,
         pubSubOAuthManager.isLinked(),
         doorbellEventClient,
+        nightModeActive,
+        displaySettings.doorbellRingtoneUri,
     ) {
         if (frontDoorConfig.googleDeviceId.isBlank() || !pubSubOAuthManager.isLinked()) {
             return@LaunchedEffect
@@ -205,7 +262,10 @@ fun MeiHomeApp(
                 doorbellEventClient.pullChime(frontDoorConfig.googleDeviceId)
             }.onSuccess { chime ->
                 if (chime) {
-                    frontDoorOpen = true
+                    if (!nightModeActive) {
+                        playDoorbellRingtone(context, displaySettings.doorbellRingtoneUri)
+                        frontDoorOpen = true
+                    }
                 }
             }
             delay(2_000L)
@@ -367,6 +427,34 @@ fun MeiHomeApp(
                 shoppingListName = state.shoppingListName,
                 todoListName = state.todoListName,
                 calendarPermissionGranted = state.calendarPermissionGranted,
+                displaySettings = displaySettings,
+                doorbellRingtoneName = doorbellRingtoneName(context, displaySettings.doorbellRingtoneUri),
+                onDisplaySettingsChange = { updated ->
+                    displaySettings = updated
+                    displaySettingsPreferences.save(updated)
+                },
+                onChooseDoorbellRingtone = {
+                    val currentUri = displaySettings.doorbellRingtoneUri
+                        .takeIf { it.isNotBlank() }
+                        ?.let(Uri::parse)
+                        ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+                    ringtonePickerLauncher.launch(
+                        Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                            putExtra(
+                                RingtoneManager.EXTRA_RINGTONE_TYPE,
+                                RingtoneManager.TYPE_RINGTONE,
+                            )
+                            putExtra(
+                                RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT,
+                                true,
+                            )
+                            putExtra(
+                                RingtoneManager.EXTRA_RINGTONE_EXISTING_URI,
+                                currentUri,
+                            )
+                        },
+                    )
+                },
                 onSignIn = { activity?.let(viewModel::signIn) },
                 onSignOut = { viewModel.signOut(context) },
                 onSelectShopping = { selectingRole = ListRole.SHOPPING },
@@ -465,6 +553,10 @@ private fun SettingsDialog(
     shoppingListName: String?,
     todoListName: String?,
     calendarPermissionGranted: Boolean,
+    displaySettings: MeiHomeDisplaySettings,
+    doorbellRingtoneName: String,
+    onDisplaySettingsChange: (MeiHomeDisplaySettings) -> Unit,
+    onChooseDoorbellRingtone: () -> Unit,
     onSignIn: () -> Unit,
     onSignOut: () -> Unit,
     onSelectShopping: () -> Unit,
@@ -473,6 +565,8 @@ private fun SettingsDialog(
     onConfigureFrontDoor: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("MeiHome Einstellungen") },
@@ -506,6 +600,77 @@ private fun SettingsDialog(
                     TextButton(onClick = onConfigureFrontDoor) {
                         Text("Haustür konfigurieren")
                     }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "Nachtmodus",
+                            modifier = Modifier.weight(1f),
+                        )
+                        Switch(
+                            checked = displaySettings.nightModeEnabled,
+                            onCheckedChange = {
+                                onDisplaySettingsChange(
+                                    displaySettings.copy(nightModeEnabled = it),
+                                )
+                            },
+                        )
+                    }
+
+                    if (displaySettings.nightModeEnabled) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Von", modifier = Modifier.weight(1f))
+                            TextButton(
+                                onClick = {
+                                    showTimePicker(
+                                        context = context,
+                                        minutes = displaySettings.nightStartMinutes,
+                                    ) { minutes ->
+                                        onDisplaySettingsChange(
+                                            displaySettings.copy(nightStartMinutes = minutes),
+                                        )
+                                    }
+                                },
+                            ) {
+                                Text(formatMinutes(displaySettings.nightStartMinutes))
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Bis", modifier = Modifier.weight(1f))
+                            TextButton(
+                                onClick = {
+                                    showTimePicker(
+                                        context = context,
+                                        minutes = displaySettings.nightEndMinutes,
+                                    ) { minutes ->
+                                        onDisplaySettingsChange(
+                                            displaySettings.copy(nightEndMinutes = minutes),
+                                        )
+                                    }
+                                },
+                            ) {
+                                Text(formatMinutes(displaySettings.nightEndMinutes))
+                            }
+                        }
+                    }
+
+                    TextButton(
+                        onClick = onChooseDoorbellRingtone,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Klingelton: $doorbellRingtoneName")
+                    }
+
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                     TextButton(onClick = onSignOut) {
                         Text("Abmelden")
@@ -607,6 +772,49 @@ private fun AddItemDialog(
     )
 }
 
+
+private fun formatMinutes(minutes: Int): String =
+    "%02d:%02d".format(minutes / 60, minutes % 60)
+
+private fun showTimePicker(
+    context: Context,
+    minutes: Int,
+    onSelected: (Int) -> Unit,
+) {
+    android.app.TimePickerDialog(
+        context,
+        { _, hour, minute -> onSelected(hour * 60 + minute) },
+        minutes / 60,
+        minutes % 60,
+        true,
+    ).show()
+}
+
+private fun doorbellRingtoneName(
+    context: Context,
+    uriValue: String,
+): String {
+    val uri = uriValue
+        .takeIf { it.isNotBlank() }
+        ?.let(Uri::parse)
+        ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+    return runCatching {
+        RingtoneManager.getRingtone(context, uri)?.getTitle(context)
+    }.getOrNull().orEmpty().ifBlank { "Standard" }
+}
+
+private fun playDoorbellRingtone(
+    context: Context,
+    uriValue: String,
+) {
+    val uri = uriValue
+        .takeIf { it.isNotBlank() }
+        ?.let(Uri::parse)
+        ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+    runCatching {
+        RingtoneManager.getRingtone(context, uri)?.play()
+    }
+}
 
 private tailrec fun Context.findActivity(): Activity? =
     when (this) {
