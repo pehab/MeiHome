@@ -25,10 +25,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,8 +40,13 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.haberland.meihome.domain.model.MeiList
+import de.haberland.meihome.smarthome.DoorbellStreamStatus
+import de.haberland.meihome.smarthome.DoorbellWebRtcController
+import de.haberland.meihome.smarthome.FrontDoorPreferences
+import de.haberland.meihome.smarthome.GoogleSdmDoorbellClient
 import de.haberland.meihome.ui.dashboard.DashboardScreen
 import de.haberland.meihome.ui.dashboard.DashboardViewModel
+import de.haberland.meihome.ui.dashboard.components.FrontDoorConfigDialog
 import de.haberland.meihome.ui.dashboard.components.FrontDoorDialog
 import de.haberland.meihome.ui.shopping.ShoppingItemDialog
 
@@ -57,9 +64,30 @@ fun MeiHomeApp(
     val context = LocalContext.current
     val activity = context.findActivity()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val frontDoorPreferences = remember(context) { FrontDoorPreferences(context) }
+    var frontDoorConfig by remember { mutableStateOf(frontDoorPreferences.load()) }
+    var streamStatus by remember { mutableStateOf<DoorbellStreamStatus>(DoorbellStreamStatus.Idle) }
+    val frontDoorScope = rememberCoroutineScope()
+    val doorbellClient = remember(
+        frontDoorConfig.googleProjectId,
+        frontDoorConfig.googleDeviceId,
+        frontDoorConfig.googleAccessToken,
+    ) {
+        GoogleSdmDoorbellClient { frontDoorConfig }
+    }
+    val webRtcController = remember(doorbellClient) {
+        DoorbellWebRtcController(
+            context = context,
+            client = doorbellClient,
+            scope = frontDoorScope,
+            onStatusChanged = { streamStatus = it },
+        )
+    }
+
     var updatePromptDismissed by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
     var frontDoorOpen by remember { mutableStateOf(false) }
+    var frontDoorSettingsOpen by remember { mutableStateOf(false) }
     var selectingRole by remember { mutableStateOf<ListRole?>(null) }
     var addRole by remember { mutableStateOf<ListRole?>(null) }
     val calendarPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -79,6 +107,18 @@ fun MeiHomeApp(
 
     LaunchedEffect(updateReadyToInstall) {
         if (!updateReadyToInstall) updatePromptDismissed = false
+    }
+
+    LaunchedEffect(frontDoorOpen, frontDoorConfig.googleConfigured, webRtcController) {
+        if (frontDoorOpen && frontDoorConfig.googleConfigured) {
+            webRtcController.start()
+        } else {
+            webRtcController.stop()
+        }
+    }
+
+    DisposableEffect(webRtcController) {
+        onDispose { webRtcController.release() }
     }
 
     MaterialTheme(colorScheme = darkColorScheme()) {
@@ -104,7 +144,22 @@ fun MeiHomeApp(
 
         if (frontDoorOpen) {
             FrontDoorDialog(
+                cameraConfigured = frontDoorConfig.googleConfigured,
+                streamStatus = streamStatus,
+                webRtcController = webRtcController,
                 onDismiss = { frontDoorOpen = false },
+            )
+        }
+
+        if (frontDoorSettingsOpen) {
+            FrontDoorConfigDialog(
+                initial = frontDoorConfig,
+                onSave = { config ->
+                    frontDoorPreferences.save(config)
+                    frontDoorConfig = config
+                    frontDoorSettingsOpen = false
+                },
+                onDismiss = { frontDoorSettingsOpen = false },
             )
         }
 
@@ -122,6 +177,7 @@ fun MeiHomeApp(
                 onRequestCalendarPermission = {
                     calendarPermissionLauncher.launch(Manifest.permission.READ_CALENDAR)
                 },
+                onConfigureFrontDoor = { frontDoorSettingsOpen = true },
                 onDismiss = { settingsOpen = false },
             )
         }
@@ -204,6 +260,7 @@ private fun SettingsDialog(
     onSelectShopping: () -> Unit,
     onSelectTodo: () -> Unit,
     onRequestCalendarPermission: () -> Unit,
+    onConfigureFrontDoor: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -235,6 +292,9 @@ private fun SettingsDialog(
                                 "Kalenderzugriff erlauben"
                             },
                         )
+                    }
+                    TextButton(onClick = onConfigureFrontDoor) {
+                        Text("Haustür konfigurieren")
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                     TextButton(onClick = onSignOut) {
