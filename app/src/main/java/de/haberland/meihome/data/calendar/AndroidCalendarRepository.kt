@@ -9,11 +9,15 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.CalendarContract
 import androidx.core.content.ContextCompat
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.ZonedDateTime
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 
@@ -56,7 +60,26 @@ class AndroidCalendarRepository(
         )
 
         publish()
-        awaitClose { context.contentResolver.unregisterContentObserver(observer) }
+
+        // Calendar data itself does not necessarily change at midnight. Refresh
+        // explicitly so a permanently running wall tablet rolls over to the new day.
+        val dayChangeRefresh = launch {
+            while (true) {
+                val zone = ZoneId.systemDefault()
+                val now = ZonedDateTime.now(zone)
+                val nextMidnight = now.toLocalDate().plusDays(1).atStartOfDay(zone)
+                val millisUntilMidnight = Duration.between(now, nextMidnight)
+                    .toMillis()
+                    .coerceAtLeast(1L)
+                delay(millisUntilMidnight + 1_000L)
+                publish()
+            }
+        }
+
+        awaitClose {
+            dayChangeRefresh.cancel()
+            context.contentResolver.unregisterContentObserver(observer)
+        }
     }
 
     private fun hasPermission(): Boolean =
