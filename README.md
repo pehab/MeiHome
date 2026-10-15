@@ -1,7 +1,13 @@
 # MeiHome
 
+## Sicherheitsupdate 0.6.11
+
+Google-/Nest- und Pub/Sub-Rückgaben benötigen jetzt einen zufälligen, lokal gespeicherten und einmalig gültigen Prüfwert für den zuletzt gestarteten Verbindungsaufbau. Vorgänge laufen nach zehn Minuten ab; unbekannte, alte oder wiederholte Rückgaben werden vor dem Token-Austausch abgewiesen. Laufende Autorisierungen werden weder gesichert noch auf andere Geräte übertragen. Bestehende Verknüpfungen bleiben erhalten.
+
+Regressionstests prüfen Wiederverwendung, Ablauf, Wechsel zwischen den beiden Verbindungsvorgängen und Prozessneustart. PKCE und verifizierte HTTPS-App-Links bleiben ein gesondertes Thema für die Google-/Redirect-Konfiguration. Firebase-Regeln und Nuki-Türbedienung wurden nicht verändert.
+
 Familien-Dashboard für ein Android-Wandtablet mit MeiLists, Kalender und Haustürsteuerung.
-Aktueller Stand: **0.6.10**, `versionCode 21`; Paket `de.haberland.meihome`.
+Aktueller Stand: **0.6.11**, `versionCode 22`; Paket `de.haberland.meihome`.
 
 ## Funktionen
 

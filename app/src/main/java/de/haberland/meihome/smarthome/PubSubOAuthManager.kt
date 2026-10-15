@@ -9,7 +9,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 private const val PUBSUB_SCOPE = "https://www.googleapis.com/auth/pubsub"
-private const val PUBSUB_OAUTH_STATE = "meihome_pubsub"
 
 class PubSubOAuthManager(
     private val preferences: FrontDoorPreferences,
@@ -22,7 +21,7 @@ class PubSubOAuthManager(
             "scope" to PUBSUB_SCOPE,
             "access_type" to "offline",
             "prompt" to "consent",
-            "state" to PUBSUB_OAUTH_STATE,
+            "state" to preferences.beginOAuthRequest(OAuthFlow.PUBSUB),
         )
         val query = params.entries.joinToString("&") { encode(it.key) + "=" + encode(it.value) }
         return Uri.parse("https://accounts.google.com/o/oauth2/v2/auth?$query")
@@ -97,9 +96,6 @@ class PubSubOAuthManager(
     private fun encode(value: String): String =
         URLEncoder.encode(value, Charsets.UTF_8.name())
 
-    companion object {
-        const val STATE = PUBSUB_OAUTH_STATE
-    }
 }
 
 class PubSubTokenManager(

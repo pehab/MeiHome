@@ -57,6 +57,7 @@ import de.haberland.meihome.smarthome.FrontDoorPreferences
 import de.haberland.meihome.smarthome.GOOGLE_DEVICE_ACCESS_PROJECT_ID
 import de.haberland.meihome.smarthome.GoogleSdmDoorbellClient
 import de.haberland.meihome.smarthome.NestOAuthManager
+import de.haberland.meihome.smarthome.OAuthFlow
 import de.haberland.meihome.smarthome.NestTokenManager
 import de.haberland.meihome.smarthome.NukiWebClient
 import de.haberland.meihome.smarthome.PubSubOAuthManager
@@ -200,9 +201,15 @@ fun MeiHomeApp(
         val callback = nestOAuthCallback ?: return@LaunchedEffect
 
         try {
+            val flow = frontDoorPreferences.consumeOAuthRequest(callback.getQueryParameter("state"))
+            if (flow == null) {
+                nestSetupMessage = "Ungültige oder abgelaufene Google-Rückgabe. Bitte die Verbindung erneut starten."
+                return@LaunchedEffect
+            }
+
             val error = callback.getQueryParameter("error")
             if (!error.isNullOrBlank()) {
-                nestSetupMessage = "Google-Verbindung abgebrochen: $error"
+                nestSetupMessage = "Google-Verbindung wurde abgebrochen. Bitte erneut starten."
                 return@LaunchedEffect
             }
 
@@ -212,8 +219,7 @@ fun MeiHomeApp(
                 return@LaunchedEffect
             }
 
-            val stateValue = callback.getQueryParameter("state")
-            if (stateValue == PubSubOAuthManager.STATE) {
+            if (flow == OAuthFlow.PUBSUB) {
                 runCatching {
                     val tokenResponse = pubSubOAuthManager.exchangeAuthorizationCode(code)
                     pubSubTokenManager.acceptInitial(tokenResponse)
@@ -244,6 +250,9 @@ fun MeiHomeApp(
                     nestSetupMessage = it.message ?: "Google Home konnte nicht verbunden werden."
                 }
             }
+        } catch (failure: Exception) {
+            if (failure is kotlinx.coroutines.CancellationException) throw failure
+            nestSetupMessage = "Google-Rückgabe konnte nicht sicher verarbeitet werden. Bitte erneut verbinden."
         } finally {
             onNestOAuthCallbackConsumed()
         }
@@ -431,14 +440,22 @@ fun MeiHomeApp(
                     if (enteredSecret.isNotBlank()) {
                         frontDoorPreferences.setNestClientSecret(enteredSecret)
                     }
-                    activity?.startActivity(
-                        Intent(Intent.ACTION_VIEW, nestOAuthManager.authorizationUri()),
-                    )
+                    runCatching {
+                        activity?.startActivity(
+                            Intent(Intent.ACTION_VIEW, nestOAuthManager.authorizationUri()),
+                        )
+                    }.onFailure {
+                        nestSetupMessage = "Google-Verbindung konnte nicht gestartet werden. Bitte erneut versuchen."
+                    }
                 },
                 onConnectPubSub = {
-                    activity?.startActivity(
-                        Intent(Intent.ACTION_VIEW, pubSubOAuthManager.authorizationUri()),
-                    )
+                    runCatching {
+                        activity?.startActivity(
+                            Intent(Intent.ACTION_VIEW, pubSubOAuthManager.authorizationUri()),
+                        )
+                    }.onFailure {
+                        nestSetupMessage = "Google-Verbindung konnte nicht gestartet werden. Bitte erneut versuchen."
+                    }
                 },
                 onDiscoverDoorbell = {
                     runCatching {

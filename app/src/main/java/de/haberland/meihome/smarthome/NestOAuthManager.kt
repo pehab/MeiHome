@@ -17,9 +17,6 @@ data class NestTokenResponse(
 class NestOAuthManager(
     private val preferences: FrontDoorPreferences,
 ) {
-    companion object {
-        const val STATE = "meihome_nest"
-    }
     fun authorizationUri(): Uri {
         val params = linkedMapOf(
             "redirect_uri" to GOOGLE_NEST_REDIRECT_URI,
@@ -28,7 +25,7 @@ class NestOAuthManager(
             "client_id" to GOOGLE_NEST_OAUTH_CLIENT_ID,
             "response_type" to "code",
             "scope" to "https://www.googleapis.com/auth/sdm.service",
-            "state" to STATE,
+            "state" to preferences.beginOAuthRequest(OAuthFlow.NEST),
         )
         val query = params.entries.joinToString("&") {
             encode(it.key) + "=" + encode(it.value)

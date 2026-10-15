@@ -5,6 +5,29 @@ import android.content.Context
 class FrontDoorPreferences(context: Context) {
     private val preferences = context.getSharedPreferences("front_door", Context.MODE_PRIVATE)
     private val secrets = SecureSecretStore(context)
+    private val oauthPreferences = context.getSharedPreferences("front_door_oauth", Context.MODE_PRIVATE)
+    private val oauthRequests = OAuthRequestState(
+        load = {
+            val state = oauthPreferences.getString("state", null)
+            val flow = oauthPreferences.getString("flow", null)
+                ?.let { value -> OAuthFlow.entries.firstOrNull { it.name == value } }
+            if (state != null && flow != null) {
+                PendingOAuthRequest(state, flow, oauthPreferences.getLong("started_at", 0L))
+            } else null
+        },
+        save = { pending ->
+            val editor = oauthPreferences.edit().clear()
+            if (pending != null) {
+                editor.putString("state", pending.state)
+                    .putString("flow", pending.flow.name)
+                    .putLong("started_at", pending.startedAtMillis)
+            }
+            check(editor.commit()) { "Google-Verbindung konnte nicht sicher vorbereitet werden." }
+        },
+    )
+
+    fun beginOAuthRequest(flow: OAuthFlow): String = oauthRequests.begin(flow)
+    fun consumeOAuthRequest(state: String?): OAuthFlow? = oauthRequests.consume(state)
 
     fun load(): FrontDoorConfig = FrontDoorConfig(
         googleProjectId = preferences
