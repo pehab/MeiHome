@@ -13,8 +13,8 @@ android {
         applicationId = "de.haberland.meihome"
         minSdk = 26
         targetSdk = 37
-        versionCode = 22
-        versionName = "0.6.11"
+        versionCode = 23
+        versionName = "0.6.12"
     }
 
     compileOptions {
@@ -58,4 +58,20 @@ dependencies {
     implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.googleid)
     debugImplementation(libs.androidx.compose.ui.tooling)
+}
+
+// Optional existing APK signing identity restored by CI; never commit a keystore.
+android {
+    val githubStore = System.getenv("MEI_GITHUB_STORE_FILE")
+    if (!githubStore.isNullOrBlank()) {
+        signingConfigs {
+            create("githubUpdates") {
+                storeFile = file(githubStore)
+                storePassword = System.getenv("MEI_GITHUB_STORE_PASSWORD")
+                keyAlias = System.getenv("MEI_GITHUB_KEY_ALIAS")
+                keyPassword = System.getenv("MEI_GITHUB_KEY_PASSWORD")
+            }
+        }
+        buildTypes.getByName("debug").signingConfig = signingConfigs.getByName("githubUpdates")
+    }
 }

@@ -646,6 +646,10 @@ private fun SettingsDialog(
         title = { Text("MeiHome Einstellungen") },
         text = {
             Column {
+                TextButton(onClick = {
+                    de.meiapps.updates.GitHubUpdates.showSettings(context, "pehab/MeiHome")
+                }) { Text("App-Updates") }
+
                 Text(
                     if (isSignedIn) {
                         "Angemeldet als " + (userEmail ?: "Google-Konto")
